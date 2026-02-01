@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anime Wallpapers Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined">
+</head>
+
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="logo">Anime <b>Wallpapers</b></span>
+                <button id="darkModeToggle" class="theme-toggle">
+                    <span class="material-icons-outlined">dark_mode</span>
+                </button>
+            </div>
+
+            <div class="quick-filter">
+                <p class="zone-title">Khám phá nhanh</p>
+                <div class="filter-list">
+                    <button class="filter-item" onclick="filterByDynamicTag('mobile')">
+                        <span class="material-icons-outlined">smartphone</span> Mobile
+                    </button>
+                    <button class="filter-item" onclick="filterByDynamicTag('pc')">
+                        <span class="material-icons-outlined">computer</span> PC / Laptop
+                    </button>
+                    <button class="filter-item" onclick="filterByDynamicTag('anime')">
+                        <span class="material-icons-outlined">palette</span> Anime
+                    </button>
+                    <button class="filter-item" onclick="filterByDynamicTag('game')">
+                        <span class="material-icons-outlined">sports_esports</span> Games
+                    </button>
+                </div>
+            </div>
+
+            <div class="upload-container">
+                <div id="dropZone" class="drop-zone">
+                    <span class="material-icons-outlined">cloud_upload</span>
+                    <p id="dropText">Kéo thả hoặc Click chọn ảnh</p>
+                    <input type="file" id="imageInput" accept="image/*" multiple>
+                    <img id="preview" src="" style="display: none;">
+                </div>
+                <div class="form-group">
+                    <input type="text" id="deviceInput" placeholder="Thiết bị (Mobile, PC)">
+                    <input type="text" id="themeInput" placeholder="Chủ đề (Anime, Game)">
+                    <input type="text" id="nameInput" placeholder="Tên cụ thể (Luffy, Jinx...)">
+                </div>
+                <button class="btn-primary" onclick="handleUpload()">
+                    <span class="material-icons-outlined">send</span> Tải lên ngay
+                </button>
+            </div>
+
+            <div class="danger-zone">
+                <button class="btn-delete-all" onclick="deleteAllPhotos()">
+                    <span class="material-icons-outlined">delete_forever</span>
+                    <span>Xóa tất cả ảnh</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="search-nav-row">
+                    <div class="search-box">
+                        <span class="material-icons-outlined">search</span>
+                        <input type="text" id="searchInput" placeholder="Tìm kiếm..." oninput="filterImages()">
+                    </div>
+                    <div id="pagination" class="pagination"></div>
+                </div>
+                <div class="filter-tags" id="dynamic-tags"></div>
+            </header>
+            <div id="gallery" class="gallery-grid"></div>
+        </main>
+    </div>
+
+    <div id="lightbox" class="lightbox" onclick="this.style.display='none'"><img id="lightbox-img"></div>
+
+    <div id="editModal" class="lightbox">
+        <div class="edit-box" onclick="event.stopPropagation()">
+            <h3>Chỉnh sửa thông tin</h3>
+            <input type="hidden" id="editId">
+            <div class="form-group">
+                <input type="text" id="editDeviceInput" placeholder="Thiết bị">
+                <input type="text" id="editThemeInput" placeholder="Chủ đề">
+                <input type="text" id="editNameInput" placeholder="Tên cụ thể">
+            </div>
+            <div class="edit-actions">
+                <button class="tag-btn" onclick="closeEditModal()">Hủy</button>
+                <button class="btn-primary" onclick="saveEdit()">Lưu</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+    <script type="module" src="script.js"></script>
+    <button id="backToTop" class="back-to-top">
+        <span class="material-icons-outlined">arrow_upward</span>
+    </button>
+</body>
+
+</html>
