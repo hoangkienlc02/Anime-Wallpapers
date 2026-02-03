@@ -24,16 +24,25 @@
             <div class="quick-filter">
                 <p class="zone-title">Khám phá nhanh</p>
                 <div class="filter-list">
-                    <button class="filter-item" onclick="filterByDynamicTag('mobile')">
+                    <button class="filter-item" onclick="filterByType('video', this)">
+                        <span class="material-icons-outlined">videocam</span> Video
+                    </button>
+                    <button class="filter-item" onclick="filterByType('image', this)">
+                        <span class="material-icons-outlined">image</span> Hình ảnh
+                    </button>
+
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 10px 0; opacity: 0.5;">
+
+                    <button class="filter-item" onclick="filterByDynamicTag('mobile', this)">
                         <span class="material-icons-outlined">smartphone</span> Mobile
                     </button>
-                    <button class="filter-item" onclick="filterByDynamicTag('pc')">
-                        <span class="material-icons-outlined">computer</span> PC / Laptop
+                    <button class="filter-item" onclick="filterByDynamicTag('pc', this)">
+                        <span class="material-icons-outlined">desktop_windows</span> PC / Laptop
                     </button>
-                    <button class="filter-item" onclick="filterByDynamicTag('anime')">
+                    <button class="filter-item" onclick="filterByDynamicTag('anime', this)">
                         <span class="material-icons-outlined">palette</span> Anime
                     </button>
-                    <button class="filter-item" onclick="filterByDynamicTag('game')">
+                    <button class="filter-item" onclick="filterByDynamicTag('game', this)">
                         <span class="material-icons-outlined">sports_esports</span> Games
                     </button>
                 </div>
