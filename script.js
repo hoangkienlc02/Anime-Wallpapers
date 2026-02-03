@@ -462,18 +462,32 @@ async function loadImages(page = 1) { // Thêm tham số mặc định
     goToPage(page); // Sử dụng tham số page truyền vào
 }
 // Hiện ảnh ở layout upload
-document.getElementById('imageInput').addEventListener('change', function() {
-    const file = this.files[0];
+// --- SỬA TẠI script.js (Phần xử lý Preview) ---
+document.getElementById('imageInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
     const preview = document.getElementById('preview');
+    const videoPreview = document.getElementById('videoPreview');
     const dropText = document.getElementById('dropText');
 
     if (file) {
         const reader = new FileReader();
-        reader.onload = function(e) {
-            preview.src = e.target.result;
-            preview.style.display = 'block'; // Hiện ảnh
-            dropText.style.display = 'none'; // Ẩn chữ hướng dẫn
-        }
+        const isVideo = file.type.startsWith('video/');
+
+        reader.onload = function(event) {
+            if (isVideo) {
+                // Nếu là Video: Hiển thị preview video, ẩn preview ảnh
+                videoPreview.src = event.target.result;
+                videoPreview.style.display = 'block';
+                preview.style.display = 'none';
+            } else {
+                // Nếu là Ảnh: Hiển thị preview ảnh, ẩn preview video
+                preview.src = event.target.result;
+                preview.style.display = 'block';
+                videoPreview.style.display = 'none';
+            }
+            dropText.style.display = 'none'; // Ẩn dòng chữ hướng dẫn
+        };
+
         reader.readAsDataURL(file);
     }
 });
@@ -518,21 +532,30 @@ document.addEventListener('keydown', (e) => {
 
 // Hàm xóa sạch thông tin sau khi đăng thành công
 function resetUploadForm() {
-    // 1. Xóa file đã chọn trong input
+    // 1. Xóa file đã chọn
     document.getElementById('imageInput').value = "";
     
-    // 2. Xóa các ô nhập liệu văn bản
+    // 2. Xóa các ô nhập liệu
     document.getElementById('deviceInput').value = "";
     document.getElementById('themeInput').value = "";
-    document.getElementById('subNameInput').value = "";
+    document.getElementById('nameInput').value = "";
     
-    // 3. Ẩn ảnh xem trước (Preview) và hiện lại chữ hướng dẫn
+    // 3. Ẩn tất cả preview và hiện lại dòng chữ hướng dẫn
     const preview = document.getElementById('preview');
+    const videoPreview = document.getElementById('videoPreview');
     const dropText = document.getElementById('dropText');
-    
-    preview.src = "";
-    preview.style.display = 'none';
-    dropText.style.display = 'block';
+
+    if (preview) {
+        preview.src = "";
+        preview.style.display = 'none';
+    }
+    if (videoPreview) {
+        videoPreview.src = "";
+        videoPreview.style.display = 'none';
+    }
+    if (dropText) {
+        dropText.style.display = 'block';
+    }
 }
 
 loadImages();
