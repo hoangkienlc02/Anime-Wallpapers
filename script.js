@@ -54,7 +54,7 @@ window.downloadImage = async (url, filename) => {
         window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
         showToast("Không thể tải ảnh xuống trực tiếp!", "error");
-        window.open(url, '_blank'); 
+        window.open(url, '_blank');
     }
 };
 
@@ -76,7 +76,7 @@ function renderFilterTags() {
 
     // 1. Đếm số lượng theo "Tên cụ thể" (subName)
     const nameCounts = {};
-    
+
     allImages.forEach(img => {
         if (img.subName) {
             const name = img.subName.trim();
@@ -95,7 +95,7 @@ function renderFilterTags() {
         btn.className = 'tag-btn';
         // Hiển thị định dạng: Tên (Số lượng)
         btn.innerHTML = `${name} <span class="tag-count">${nameCounts[name]}</span>`;
-        
+
         btn.onclick = () => filterByDynamicTag(name.toLowerCase(), btn);
         container.appendChild(btn);
     });
@@ -114,9 +114,9 @@ window.filterByDynamicTag = (tag, btn) => {
     } else {
         // Lọc ưu tiên theo subName cho các tag ở top-bar 
         // và vẫn cho phép lọc theo device/theme cho các nút ở sidebar
-        filteredImages = allImages.filter(i => 
+        filteredImages = allImages.filter(i =>
             i.subName?.toLowerCase().includes(term) ||
-            i.device?.toLowerCase() === term || 
+            i.device?.toLowerCase() === term ||
             i.theme?.toLowerCase() === term
         );
     }
@@ -127,7 +127,7 @@ window.filterByDynamicTag = (tag, btn) => {
 window.goToPage = (page) => {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1 || (page > totalPages && totalPages > 0)) return;
-    
+
     currentPage = page;
     const start = (currentPage - 1) * itemsPerPage;
     renderGallery(filteredImages.slice(start, start + itemsPerPage)); // Chỉ hiển thị 20 ảnh của trang hiện tại
@@ -153,7 +153,7 @@ function renderPagination() {
     container.appendChild(prevBtn);
 
     // --- Logic hiển thị số trang và dấu ba chấm ---
-    const range = 1; 
+    const range = 1;
     let pages = [];
     pages.push(1);
     for (let i = currentPage - range; i <= currentPage + range; i++) {
@@ -236,27 +236,27 @@ window.handleUpload = async () => {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('upload_preset', UPLOAD_PRESET);
-        
+
         try {
             // URL API thay đổi tùy theo resourceType (image/upload hoặc video/upload)
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`, { 
-                method: 'POST', 
-                body: fd 
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`, {
+                method: 'POST',
+                body: fd
             });
-            
+
             if (!res.ok) throw new Error("Cloudinary Error");
 
             const data = await res.json();
-            
+
             // Lưu vào Firestore kèm theo trường 'type'
-            return addDoc(collection(db, "photos"), { 
-                url: data.secure_url, 
+            return addDoc(collection(db, "photos"), {
+                url: data.secure_url,
                 publicId: data.public_id,
                 type: resourceType, // Lưu 'image' hoặc 'video'
-                device, 
-                theme, 
-                subName, 
-                createdAt: new Date() 
+                device,
+                theme,
+                subName,
+                createdAt: new Date()
             });
         } catch (e) {
             console.error(e);
@@ -269,7 +269,7 @@ window.handleUpload = async () => {
     showToast("Đã đăng tải thành công!");
 
     // --- RESET FORM ---
-    fileInput.value = ""; 
+    fileInput.value = "";
     deviceInput.value = "";
     themeInput.value = "";
     nameInput.value = "";
@@ -289,15 +289,15 @@ window.handleUpload = async () => {
 function renderGallery(data) {
     const gallery = document.getElementById('gallery');
     gallery.innerHTML = "";
-    
+
     data.forEach(item => {
         const isMob = item.device?.toLowerCase().includes('mobile');
         // Kiểm tra xem đây là video hay ảnh
         const isVideo = item.type === 'video';
-        
+
         const div = document.createElement('div');
         div.className = `card ${isMob ? 'mobile-view' : ''}`;
-        
+
         // Tạo tag hiển thị tương ứng (Video hoặc Ảnh)
         let mediaHtml = "";
         if (isVideo) {
@@ -312,7 +312,7 @@ function renderGallery(data) {
         } else {
             mediaHtml = `<img src="${getOptimizedUrl(item.url)}" loading="lazy" onload="this.classList.add('loaded')">`;
         }
-        
+
         div.innerHTML = `
             ${mediaHtml}
             <div class="card-overlay">
@@ -322,7 +322,7 @@ function renderGallery(data) {
                     ${item.subName ? `<span class="tag-label">${item.subName}</span>` : ''}
                 </div>
                 <div class="actions">
-                    <button onclick="event.stopPropagation(); editPhoto('${item.id}','${item.device}','${item.theme}','${item.subName||''}')">
+                    <button onclick="event.stopPropagation(); editPhoto('${item.id}','${item.device}','${item.theme}','${item.subName || ''}')">
                         <span class="material-icons-outlined">edit_note</span>
                     </button>
                     <button onclick="event.stopPropagation(); downloadImage('${item.url}', '${item.subName || item.theme}${isVideo ? '.mp4' : '.jpg'}')">
@@ -333,15 +333,15 @@ function renderGallery(data) {
                     </button>
                 </div>
             </div>`;
-            
-        div.onclick = () => { 
+
+        div.onclick = () => {
             if (isVideo) {
                 // Nếu là video, click vào sẽ mở link gốc trong tab mới
                 window.open(item.url, '_blank');
             } else {
                 // Nếu là ảnh, mở Lightbox như cũ
-                document.getElementById('lightbox-img').src = item.url; 
-                document.getElementById('lightbox').style.display = 'flex'; 
+                document.getElementById('lightbox-img').src = item.url;
+                document.getElementById('lightbox').style.display = 'flex';
             }
         };
         gallery.appendChild(div);
@@ -351,21 +351,21 @@ function renderGallery(data) {
 // --- CÁC THAO TÁC DỮ LIỆU (CRUD) ---
 // Xóa một ảnh dựa trên ID
 window.deletePhoto = async (id, publicId) => {
-    if (confirm("Bạn muốn xóa ảnh này vĩnh viễn?")) { 
+    if (confirm("Bạn muốn xóa ảnh này vĩnh viễn?")) {
         try {
             // 1. Gọi API xóa của Cloudinary (Yêu cầu API Key)
             // Lưu ý: publicId thường có dạng "folder/image_name"
             const apiKey = "962206114668"; // Lấy từ config của bạn
-            
+
             // Trong thực tế, bạn nên dùng một Cloud Function để bảo mật API Secret.
             // Đoạn code dưới đây minh họa logic gửi yêu cầu xóa:
             console.log("Đang yêu cầu Cloudinary xóa ảnh:", publicId);
 
             // 2. Xóa tài liệu trên Firestore
-            await deleteDoc(doc(db, "photos", id)); 
-            
-            showToast("Đã xóa ảnh thành công!"); 
-            loadImages(); 
+            await deleteDoc(doc(db, "photos", id));
+
+            showToast("Đã xóa ảnh thành công!");
+            loadImages();
         } catch (error) {
             showToast("Lỗi khi xóa: " + error.message, "error");
         }
@@ -377,7 +377,7 @@ window.deleteAllPhotos = async () => {
     if (confirm("CẢNH BÁO: Xóa sạch toàn bộ ảnh trên cả Cloudinary và hệ thống?")) {
         try {
             const snap = await getDocs(collection(db, "photos"));
-            
+
             const deletePromises = snap.docs.map(async (d) => {
                 const data = d.data();
                 const publicId = data.publicId; // Lấy publicId đã lưu khi upload
@@ -424,7 +424,7 @@ window.saveEdit = async () => {
 
     try {
         await updateDoc(doc(db, "photos", id), newData);
-        
+
         // Cập nhật lại mảng dữ liệu tạm thời (allImages) để không cần tải lại toàn bộ từ Firebase
         const index = allImages.findIndex(img => img.id === id);
         if (index !== -1) {
@@ -432,12 +432,12 @@ window.saveEdit = async () => {
             filteredImages = [...allImages]; // Cập nhật cả mảng đã lọc
         }
 
-        closeEditModal(); 
-        showToast("Cập nhật thành công!"); 
-        
+        closeEditModal();
+        showToast("Cập nhật thành công!");
+
         // Gọi goToPage với currentPage hiện tại thay vì loadImages()
         renderFilterTags();
-        goToPage(currentPage); 
+        goToPage(currentPage);
     } catch (error) {
         showToast("Lỗi khi cập nhật!", "error");
     }
@@ -446,7 +446,7 @@ window.saveEdit = async () => {
 // Tìm kiếm ảnh thời gian thực theo từ khóa
 window.filterImages = () => {
     const term = document.getElementById('searchInput').value.toLowerCase();
-    filteredImages = allImages.filter(i => 
+    filteredImages = allImages.filter(i =>
         i.device?.toLowerCase().includes(term) || i.theme?.toLowerCase().includes(term) || i.subName?.toLowerCase().includes(term)
     );
     goToPage(1);
@@ -463,7 +463,7 @@ async function loadImages(page = 1) { // Thêm tham số mặc định
 }
 // Hiện ảnh ở layout upload
 // --- SỬA TẠI script.js (Phần xử lý Preview) ---
-document.getElementById('imageInput').addEventListener('change', function(e) {
+document.getElementById('imageInput').addEventListener('change', function (e) {
     const file = e.target.files[0];
     const preview = document.getElementById('preview');
     const videoPreview = document.getElementById('videoPreview');
@@ -473,7 +473,7 @@ document.getElementById('imageInput').addEventListener('change', function(e) {
         const reader = new FileReader();
         const isVideo = file.type.startsWith('video/');
 
-        reader.onload = function(event) {
+        reader.onload = function (event) {
             if (isVideo) {
                 // Nếu là Video: Hiển thị preview video, ẩn preview ảnh
                 videoPreview.src = event.target.result;
@@ -534,12 +534,12 @@ document.addEventListener('keydown', (e) => {
 function resetUploadForm() {
     // 1. Xóa file đã chọn
     document.getElementById('imageInput').value = "";
-    
+
     // 2. Xóa các ô nhập liệu
     document.getElementById('deviceInput').value = "";
     document.getElementById('themeInput').value = "";
     document.getElementById('nameInput').value = "";
-    
+
     // 3. Ẩn tất cả preview và hiện lại dòng chữ hướng dẫn
     const preview = document.getElementById('preview');
     const videoPreview = document.getElementById('videoPreview');
