@@ -226,10 +226,15 @@ window.handleUpload = async () => {
 
     if (validFiles.length === 0) return;
 
+    const uploadBtn = document.querySelector('button[onclick*="handleUpload"]');
+    const originalBtnText = uploadBtn.innerHTML;
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<span class="material-icons-outlined">sync</span> Đang xử lý...';
+
     showToast(`Đang tải lên ${validFiles.length} tệp...`);
 
     const promises = validFiles.map(async (file) => {
-        // XÁC ĐỊNH LOẠI FILE ĐỂ GỬI LÊN CLOUDINARY
+        // Xác định loại file để gửi lên Cloudinary
         const isVideo = file.type.startsWith('video/');
         const resourceType = isVideo ? 'video' : 'image';
 
@@ -265,10 +270,15 @@ window.handleUpload = async () => {
         }
     });
 
-    await Promise.all(promises);
-    showToast("Đã đăng tải thành công!");
+    try {
+        await Promise.all(promises);
+        showToast("Đã đăng tải thành công!");
+    } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = originalBtnText;
+    }
 
-    // --- RESET FORM ---
+    // Reset form
     fileInput.value = "";
     deviceInput.value = "";
     themeInput.value = "";
