@@ -592,6 +592,12 @@ body {
     background: var(--bg);
 }
 
+/* Explicitly honor the HTML hidden state when authentication switches views. */
+.auth-gate[hidden],
+#appShell[hidden] {
+    display: none !important;
+}
+
 .login-card {
     width: min(100%, 380px);
     padding: 2rem;
