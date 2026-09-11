@@ -4,7 +4,7 @@ service cloud.firestore {
     match /photos/{photoId} {
       // One private account owns the whole gallery.
       allow read, create, update, delete: if request.auth != null
-        && request.auth.uid == "RxSRVDPSMMVf5F5O9mgNulhfmTV43";
+        && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
     }
   }
 }
