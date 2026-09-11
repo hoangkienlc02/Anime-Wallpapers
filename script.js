@@ -93,13 +93,23 @@ async function uploadOneFile(file, metadata) {
     }
     if (!upload.ok) throw new Error(media.error?.message || `Cloudinary từ chối tệp (HTTP ${upload.status}).`);
 
-    await addDoc(collection(db, "photos"), {
-        url: media.secure_url,
-        publicId: media.public_id,
-        type: resourceType,
-        ...metadata,
-        createdAt: new Date()
-    });
+    try {
+        await addDoc(collection(db, "photos"), {
+            url: media.secure_url,
+            publicId: media.public_id,
+            type: resourceType,
+            ...metadata,
+            createdAt: new Date()
+        });
+    } catch (error) {
+        // Do not leave an inaccessible Cloudinary asset behind when Firestore rejects its metadata.
+        try {
+            await secureApi("/api/delete-media", { publicId: media.public_id, resourceType });
+        } catch (cleanupError) {
+            console.error("Không thể dọn file Cloudinary sau khi Firestore lỗi:", cleanupError);
+        }
+        throw error;
+    }
 }
 
 window.handleUpload = async () => {
