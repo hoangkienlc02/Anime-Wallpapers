@@ -17,10 +17,15 @@ export function protectPage(onReady) {
     const accountLabel = document.getElementById("accountLabel");
     let hasStarted = false;
 
+    function finishSessionCheck() {
+        document.body.classList.remove("auth-pending");
+    }
+
     async function revealApp(user) {
         gate.hidden = true;
         appShell.hidden = false;
         accountLabel.textContent = user.email || "Đã đăng nhập";
+        finishSessionCheck();
 
         if (!hasStarted) {
             hasStarted = true;
@@ -51,12 +56,16 @@ export function protectPage(onReady) {
         }
     });
 
-    signOutButton.addEventListener("click", () => signOut(auth));
+    signOutButton.addEventListener("click", () => {
+        document.body.classList.add("auth-pending");
+        signOut(auth);
+    });
 
     onAuthStateChanged(auth, async (user) => {
         if (!user) {
             appShell.hidden = true;
             gate.hidden = false;
+            finishSessionCheck();
             return;
         }
 

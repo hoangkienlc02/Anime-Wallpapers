@@ -5,7 +5,8 @@
     <title>Anime Wallpapers — Admin</title><link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined"><link rel="icon" href="logo.jpg" type="image/jpeg">
 </head>
-<body>
+<body class="auth-pending">
+    <div id="sessionLoader" class="session-loader" role="status" aria-live="polite"><div><span class="brand-mark">AW</span><p>ĐANG MỞ QUẢN TRỊ…</p></div></div>
     <section id="authGate" class="auth-gate"><form id="loginForm" class="login-card"><span class="kicker">PRIVATE ADMIN</span><h1>ANIME<br><em>WALLPAPERS</em></h1><p>Đăng nhập bằng tài khoản Firebase quản trị của bạn.</p><label>Email <input id="loginEmail" type="email" autocomplete="email" required></label><label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" required></label><p id="loginError" class="login-error" aria-live="polite"></p><button class="btn-primary" type="submit">VÀO QUẢN TRỊ <span class="material-icons-outlined">arrow_forward</span></button></form></section>
     <div id="appShell" hidden>
         <header class="site-header"><a class="brand" href="/"><span class="brand-mark">AW</span><span class="brand-wordmark">ANIME <b>WALLPAPERS</b></span></a><nav class="site-nav"><span class="nav-link active-label">QUẢN TRỊ KHO LƯU TRỮ</span></nav><div class="header-actions"><span id="accountLabel" class="account-label"></span><a class="outline-action" href="/">XEM THƯ VIỆN <span class="material-icons-outlined">north_east</span></a><button id="darkModeToggle" class="icon-action" title="Đổi giao diện"><span class="material-icons-outlined">dark_mode</span></button><button id="signOutButton" class="icon-action" title="Đăng xuất"><span class="material-icons-outlined">logout</span></button></div></header>
