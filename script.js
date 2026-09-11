@@ -57,7 +57,7 @@ window.downloadImage = async (url, filename) => {
 };
 
 const darkModeToggle = document.getElementById("darkModeToggle");
-if (localStorage.getItem("theme") === "dark") document.documentElement.dataset.theme = "dark";
+document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
 darkModeToggle.addEventListener("click", () => {
     const isDark = document.documentElement.dataset.theme === "dark";
     document.documentElement.dataset.theme = isDark ? "light" : "dark";

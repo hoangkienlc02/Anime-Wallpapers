@@ -1,95 +1,44 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Wallpapers - Khám phá</title>
+    <title>Anime Wallpapers — Archive</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined">
     <link rel="icon" href="logo.jpg" type="image/jpeg">
 </head>
-
 <body>
     <section id="authGate" class="auth-gate">
         <form id="loginForm" class="login-card">
-            <h1>Anime Wallpapers</h1>
-            <p>Đăng nhập để mở thư viện riêng của bạn.</p>
+            <span class="kicker">PRIVATE ARCHIVE</span><h1>ANIME<br><em>WALLPAPERS</em></h1>
+            <p>Đăng nhập để mở bộ sưu tập hình nền riêng của bạn.</p>
             <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
             <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" required></label>
             <p id="loginError" class="login-error" aria-live="polite"></p>
-            <button class="btn-primary" type="submit">Đăng nhập</button>
+            <button class="btn-primary" type="submit">MỞ KHO LƯU TRỮ <span class="material-icons-outlined">arrow_forward</span></button>
         </form>
     </section>
-    <div id="appShell" class="app-layout" hidden>
-        <aside class="sidebar">
-            <div class="brand">
-                <span class="logo">Anime <b>Wallpapers</b></span>
-                <div class="brand-actions">
-                    <span id="accountLabel" class="account-label"></span>
-                    <button id="darkModeToggle" class="theme-toggle" title="Đổi giao diện">
-                        <span class="material-icons-outlined">dark_mode</span>
-                    </button>
-                    <button id="signOutButton" class="theme-toggle" title="Đăng xuất">
-                        <span class="material-icons-outlined">logout</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="quick-filter">
-                <p class="zone-title">Khám phá nhanh</p>
-                <div class="filter-list">
-                    <button class="filter-item" onclick="filterByType('video', this)">
-                        <span class="material-icons-outlined">videocam</span> Video
-                    </button>
-                    <button class="filter-item" onclick="filterByType('image', this)">
-                        <span class="material-icons-outlined">image</span> Hình ảnh
-                    </button>
-
-                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 10px 0; opacity: 0.5;">
-
-                    <button class="filter-item" onclick="filterByDynamicTag('mobile', this)">
-                        <span class="material-icons-outlined">smartphone</span> Mobile
-                    </button>
-                    <button class="filter-item" onclick="filterByDynamicTag('pc', this)">
-                        <span class="material-icons-outlined">desktop_windows</span> PC / Laptop
-                    </button>
-                    <button class="filter-item" onclick="filterByDynamicTag('anime', this)">
-                        <span class="material-icons-outlined">palette</span> Anime
-                    </button>
-                    <button class="filter-item" onclick="filterByDynamicTag('game', this)">
-                        <span class="material-icons-outlined">sports_esports</span> Games
-                    </button>
-                </div>
-            </div>
-
-            <div style="margin-top: 2rem; font-size: 0.8rem; opacity: 0.6; text-align: center;">
-                © 2024 Anime Wallpaper Gallery
-            </div>
-        </aside>
-
-        <main class="main-content">
-            <header class="top-bar">
-                <div class="search-nav-row">
-                    <div class="search-box">
-                        <span class="material-icons-outlined">search</span>
-                        <input type="text" id="searchInput" placeholder="Tìm kiếm hình nền..." oninput="filterImages()">
-                    </div>
-                    <div id="pagination" class="pagination"></div>
-                </div>
+    <div id="appShell" hidden>
+        <header class="site-header">
+            <a class="brand" href="/" aria-label="Anime Wallpapers"><span class="brand-mark">AW</span><span class="brand-wordmark">ANIME <b>WALLPAPERS</b></span></a>
+            <nav class="site-nav" aria-label="Điều hướng thư viện"><button class="nav-link" onclick="filterByDynamicTag('all', this)">KHÁM PHÁ</button><button class="nav-link" onclick="filterByType('image', this)">HÌNH ẢNH</button><button class="nav-link" onclick="filterByType('video', this)">VIDEO</button></nav>
+            <div class="header-actions"><span id="accountLabel" class="account-label"></span><a class="outline-action" href="/admin">QUẢN TRỊ <span class="material-icons-outlined">north_east</span></a><button id="darkModeToggle" class="icon-action" title="Đổi giao diện"><span class="material-icons-outlined">dark_mode</span></button><button id="signOutButton" class="icon-action" title="Đăng xuất"><span class="material-icons-outlined">logout</span></button></div>
+        </header>
+        <main class="page-shell">
+            <section class="hero"><div class="hero-copy"><p class="kicker">BỘ SƯU TẬP CÁ NHÂN</p><h1>ANIME<br><span>WALLPAPERS</span></h1><p class="hero-description">Kho hình nền anime, game và chuyển động được tuyển chọn cho mọi màn hình của bạn.</p></div><div class="hero-stat"><strong>PRIVATE</strong><span>ARCHIVE · 2026</span></div></section>
+            <section class="discover-panel">
+                <div class="search-nav-row"><div class="search-box"><span class="material-icons-outlined">search</span><input type="text" id="searchInput" placeholder="Tìm tên nhân vật, anime hoặc chủ đề..." oninput="filterImages()"><span class="search-label">TÌM KHO LƯU TRỮ</span></div><div id="pagination" class="pagination"></div></div>
+                <div class="quick-filter filter-list"><span class="filter-caption">LỌC NHANH</span><button class="filter-item" onclick="filterByDynamicTag('all', this)">TẤT CẢ</button><button class="filter-item" onclick="filterByDynamicTag('anime', this)">ANIME</button><button class="filter-item" onclick="filterByDynamicTag('game', this)">GAME</button><button class="filter-item" onclick="filterByDynamicTag('mobile', this)">MOBILE</button><button class="filter-item" onclick="filterByDynamicTag('pc', this)">PC / LAPTOP</button></div>
                 <div class="filter-tags" id="dynamic-tags"></div>
-            </header>
-            <div id="gallery" class="gallery-grid"></div>
+            </section>
+            <section class="gallery-section"><div class="section-heading"><div><p class="kicker">KHÁM PHÁ HÔM NAY</p><h2>WALLPAPERS MỚI NHẤT</h2></div><span class="section-index">01 — ARCHIVE</span></div><div id="gallery" class="gallery-grid"></div></section>
         </main>
+        <footer class="site-footer"><span>© 2026 ANIME WALLPAPERS</span><span>PRIVATE COLLECTION · MADE FOR YOUR SCREEN</span></footer>
     </div>
-
-    <div id="lightbox" class="lightbox" onclick="this.style.display='none'"><img id="lightbox-img"></div>
-
+    <div id="lightbox" class="lightbox" onclick="this.style.display='none'"><img id="lightbox-img" alt="Hình nền phóng to"></div>
+    <button id="backToTop" class="back-to-top" title="Lên đầu trang"><span class="material-icons-outlined">north</span></button>
     <script type="module" src="client-script.js"></script>
-    <button id="backToTop" class="back-to-top">
-        <span class="material-icons-outlined">arrow_upward</span>
-    </button>
 </body>
-
 </html>
