@@ -144,7 +144,7 @@ window.handleUpload = async () => {
         }
         if (failed) {
             const firstFailure = failures[0];
-            showToast(`${failed} tệp lỗi. ${firstFailure.name}: ${firstFailure.message}`, "error");
+            showToast(`${failed}/${validFiles.length} tệp không tải được. ${firstFailure.message}`, "error");
         }
         await loadImages();
     } catch (error) {

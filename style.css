@@ -147,7 +147,7 @@ button { color: inherit; }
 .edit-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 27px; }
 .edit-actions .btn-primary, .edit-actions .secondary-action { width: 100%; }
 .toast-container { position: fixed; z-index: 600; right: 22px; bottom: 22px; display: grid; gap: 9px; }
-.toast { display: flex; align-items: center; gap: 9px; max-width: 390px; padding: 13px 16px; border-left: 3px solid #71d2a8; color: var(--text); background: #102e30; box-shadow: 0 12px 30px rgba(0, 0, 0, .28); transition: opacity .3s; }
+.toast { display: flex; align-items: center; gap: 9px; max-width: 390px; padding: 13px 16px; overflow-wrap: anywhere; border-left: 3px solid #71d2a8; color: var(--text); background: #102e30; box-shadow: 0 12px 30px rgba(0, 0, 0, .28); transition: opacity .3s; }
 .toast.error { border-left-color: var(--accent); }
 .back-to-top { position: fixed; z-index: 90; right: 25px; bottom: 25px; display: none; place-items: center; width: 47px; height: 47px; border: 1px solid var(--accent); color: #fff; background: var(--accent); cursor: pointer; box-shadow: 5px 5px 0 rgba(0, 0, 0, .2); }
 .back-to-top:hover { background: var(--accent-strong); }
