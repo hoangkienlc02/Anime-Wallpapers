@@ -1,593 +1,418 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { db } from "./firebase-config.js";
+import { getIdToken, protectPage } from "./auth-gate.js";
 
-// --- CẤU HÌNH FIREBASE: Kết nối ứng dụng với Database ---
-const firebaseConfig = {
-    apiKey: "AIzaSyAKYazmv5LhCsRUlGRoYm5RSHKuV5nT24A",
-    authDomain: "images-web-8e8a0.firebaseapp.com",
-    projectId: "images-web-8e8a0",
-    storageBucket: "images-web-8e8a0.firebasestorage.app",
-    messagingSenderId: "962206114668",
-    appId: "1:962206114668:web:2178cd8a304abaddce8949"
-};
+let allImages = [];
+let filteredImages = [];
+let currentPage = 1;
+const itemsPerPage = 20;
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const CLOUD_NAME = "dunavbcxk"; // Tài khoản Cloudinary
-const UPLOAD_PRESET = "my_web_preset"; // Cấu hình upload không cần ký duyệt
-
-// --- BIẾN TOÀN CỤC: Lưu trữ dữ liệu tạm thời để xử lý nhanh ---
-let allImages = [];         // Chứa toàn bộ ảnh từ Firebase
-let filteredImages = [];    // Chứa ảnh sau khi đã lọc (tìm kiếm/tag)
-let currentPage = 1;        // Trang hiện tại
-const itemsPerPage = 20;    // Số lượng ảnh hiển thị trên mỗi trang
-
-// --- HÀM TIỆN ÍCH (UTILS) ---
-// Hiển thị thông báo nhỏ (Toast) ở góc màn hình
-const showToast = (msg, type = 'success') => {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
+const showToast = (message, type = "success") => {
+    const toast = document.createElement("div");
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span class="material-icons-outlined">${type === 'success' ? 'check_circle' : 'error'}</span> ${msg}`;
-    container.appendChild(toast);
-    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2700);
+    const icon = document.createElement("span");
+    icon.className = "material-icons-outlined";
+    icon.textContent = type === "success" ? "check_circle" : "error";
+    toast.append(icon, document.createTextNode(message));
+    document.getElementById("toast-container").appendChild(toast);
+    setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 300); }, 2700);
 };
 
-// Tối ưu hóa URL ảnh: Tự động giảm dung lượng và định dạng phù hợp (Cloudinary Optimization)
 function getOptimizedUrl(url) {
-    if (!url || !url.includes('cloudinary')) return url;
-    return url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+    return url?.includes("cloudinary") ? url.replace("/upload/", "/upload/f_auto,q_auto,w_800/") : url;
 }
 
-// Xử lý tải ảnh về máy: Chuyển đổi URL sang Blob để trình duyệt tự tải xuống
+function isVideo(item) {
+    return item.type === "video" || /\.(mp4|mov)(\?|$)/i.test(item.url || "");
+}
+
+async function secureApi(path, payload) {
+    const token = await getIdToken();
+    const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Yêu cầu bảo mật thất bại.");
+    return data;
+}
+
 window.downloadImage = async (url, filename) => {
     try {
         const response = await fetch(url);
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        if (!response.ok) throw new Error("Download failed");
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
         link.href = blobUrl;
-        link.download = filename || 'download.jpg';
-        document.body.appendChild(link);
+        link.download = filename || "wallpaper";
+        document.body.append(link);
         link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-        showToast("Không thể tải ảnh xuống trực tiếp!", "error");
-        window.open(url, '_blank');
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch {
+        showToast("Không thể tải trực tiếp; đang mở file gốc.", "error");
+        window.open(url, "_blank", "noopener");
     }
 };
 
-// --- CHẾ ĐỘ SÁNG/TỐI (DARK MODE) ---
-const darkModeToggle = document.getElementById('darkModeToggle');
-if (localStorage.getItem('theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-darkModeToggle.onclick = () => {
-    let isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    localStorage.setItem('theme', isDark ? 'light' : 'dark');
-};
+const darkModeToggle = document.getElementById("darkModeToggle");
+if (localStorage.getItem("theme") === "dark") document.documentElement.dataset.theme = "dark";
+darkModeToggle.addEventListener("click", () => {
+    const isDark = document.documentElement.dataset.theme === "dark";
+    document.documentElement.dataset.theme = isDark ? "light" : "dark";
+    localStorage.setItem("theme", isDark ? "light" : "dark");
+});
 
-// --- TẠO TAG TỰ ĐỘNG (DYNAMIC TAGS) ---
-// Quét toàn bộ ảnh để lấy danh sách các Tag duy nhất và đếm số lượng
-function renderFilterTags() {
-    const container = document.getElementById('dynamic-tags');
-    // Nút "Tất cả" luôn hiển thị đầu tiên
-    container.innerHTML = `<button class="tag-btn active" onclick="filterByDynamicTag('all', this)">Tất cả (${allImages.length})</button>`;
-
-    // 1. Đếm số lượng theo "Tên cụ thể" (subName)
-    const nameCounts = {};
-
-    allImages.forEach(img => {
-        if (img.subName) {
-            const name = img.subName.trim();
-            if (name) {
-                nameCounts[name] = (nameCounts[name] || 0) + 1;
-            }
-        }
-    });
-
-    // 2. Lấy danh sách tên đã sắp xếp theo bảng chữ cái
-    const sortedNames = Object.keys(nameCounts).sort();
-
-    // 3. Render các tag tên cụ thể kèm số lượng
-    sortedNames.forEach(name => {
-        const btn = document.createElement('button');
-        btn.className = 'tag-btn';
-        // Hiển thị định dạng: Tên (Số lượng)
-        btn.innerHTML = `${name} <span class="tag-count">${nameCounts[name]}</span>`;
-
-        btn.onclick = () => filterByDynamicTag(name.toLowerCase(), btn);
-        container.appendChild(btn);
-    });
-}
-
-// Lọc ảnh khi click vào một Tag cụ thể
-window.filterByDynamicTag = (tag, btn) => {
-    // Xóa class active ở cả sidebar và top-bar
-    document.querySelectorAll('.tag-btn, .filter-item').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-
-    const term = tag.toLowerCase();
-
-    if (term === 'all') {
-        filteredImages = [...allImages];
-    } else {
-        // Lọc ưu tiên theo subName cho các tag ở top-bar 
-        // và vẫn cho phép lọc theo device/theme cho các nút ở sidebar
-        filteredImages = allImages.filter(i =>
-            i.subName?.toLowerCase().includes(term) ||
-            i.device?.toLowerCase() === term ||
-            i.theme?.toLowerCase() === term
-        );
-    }
-    goToPage(1);
-};
-
-// --- LOGIC PHÂN TRANG (PAGINATION) ---
-window.goToPage = (page) => {
-    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-    if (page < 1 || (page > totalPages && totalPages > 0)) return;
-
-    currentPage = page;
-    const start = (currentPage - 1) * itemsPerPage;
-    renderGallery(filteredImages.slice(start, start + itemsPerPage)); // Chỉ hiển thị 20 ảnh của trang hiện tại
-    renderPagination(filteredImages.length);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-// Tạo các nút số trang và Prev/Next dựa trên tổng số ảnh
-function renderPagination() {
-    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-    const container = document.getElementById('pagination');
-    container.innerHTML = '';
-
-    // Nếu không có ảnh hoặc chỉ có 1 trang thì không hiện phân trang
-    if (totalPages <= 1) return;
-
-    // --- Nút TRƯỚC (Prev) ---
-    const prevBtn = document.createElement('button');
-    prevBtn.innerHTML = '<span class="material-icons-outlined">chevron_left</span>';
-    prevBtn.className = `page-btn ${currentPage === 1 ? 'disabled' : ''}`;
-    prevBtn.disabled = currentPage === 1;
-    prevBtn.onclick = () => goToPage(currentPage - 1);
-    container.appendChild(prevBtn);
-
-    // --- Logic hiển thị số trang và dấu ba chấm ---
-    const range = 1;
-    let pages = [];
-    pages.push(1);
-    for (let i = currentPage - range; i <= currentPage + range; i++) {
-        if (i > 1 && i < totalPages) pages.push(i);
-    }
-    if (totalPages > 1) pages.push(totalPages);
-    pages = [...new Set(pages)].sort((a, b) => a - b);
-
-    pages.forEach((page, index) => {
-        if (index > 0 && page - pages[index - 1] > 1) {
-            const dots = document.createElement('span');
-            dots.innerText = '...';
-            dots.className = 'pagination-dots';
-            container.appendChild(dots);
-        }
-
-        const btn = document.createElement('button');
-        btn.innerText = page;
-        btn.className = `page-btn ${page === currentPage ? 'active' : ''}`;
-        btn.onclick = () => goToPage(page);
-        container.appendChild(btn);
-    });
-
-    // --- Nút SAU (Next) ---
-    const nextBtn = document.createElement('button');
-    nextBtn.innerHTML = '<span class="material-icons-outlined">chevron_right</span>';
-    nextBtn.className = `page-btn ${currentPage === totalPages ? 'disabled' : ''}`;
-    nextBtn.disabled = currentPage === totalPages;
-    nextBtn.onclick = () => goToPage(currentPage + 1);
-    container.appendChild(nextBtn);
-}
-
-// --- XỬ LÝ TẢI LÊN (UPLOAD LOGIC) ---
 window.handleUpload = async () => {
-    const fileInput = document.getElementById('imageInput');
-    const files = fileInput.files;
-    const deviceInput = document.getElementById('deviceInput');
-    const themeInput = document.getElementById('themeInput');
-    const nameInput = document.getElementById('nameInput');
-
-    const device = deviceInput.value.trim();
-    const theme = themeInput.value.trim();
-    const subName = nameInput.value.trim();
-
-    // Kiểm tra đầu vào
-    if (files.length === 0 || !device) {
-        return showToast("Vui lòng chọn tệp và nhập thiết bị!", "error");
+    const fileInput = document.getElementById("imageInput");
+    const device = document.getElementById("deviceInput").value.trim();
+    const theme = document.getElementById("themeInput").value.trim();
+    const subName = document.getElementById("nameInput").value.trim();
+    const files = [...fileInput.files];
+    if (!files.length || !device || !theme) {
+        showToast("Hãy chọn tệp, nhập thiết bị và chủ đề.", "error");
+        return;
     }
 
-    const MAX_SIZE = 100 * 1024 * 1024; // Nâng lên 100MB để hỗ trợ video
-    const validFiles = [];
-    const errors = [];
-
-    Array.from(files).forEach(file => {
-        const isImage = file.type.startsWith('image/');
-        const isVideo = file.type.startsWith('video/');
-
-        if (file.size > MAX_SIZE) {
-            errors.push(`"${file.name}" quá lớn (>100MB)`);
-        } else if (!isImage && !isVideo) {
-            errors.push(`"${file.name}" định dạng không hỗ trợ`);
-        } else {
-            validFiles.push(file);
-        }
+    const maxSize = 100 * 1024 * 1024;
+    const validFiles = files.filter((file) => {
+        const valid = /^(image|video)\//.test(file.type) && file.size <= maxSize;
+        if (!valid) showToast(`Bỏ qua ${file.name}: chỉ nhận ảnh/video tối đa 100 MB.`, "error");
+        return valid;
     });
+    if (!validFiles.length) return;
 
-    if (errors.length > 0) {
-        errors.forEach(err => showToast(err, "error"));
-    }
-
-    if (validFiles.length === 0) return;
-
-    const uploadBtn = document.querySelector('button[onclick*="handleUpload"]');
-    const originalBtnText = uploadBtn.innerHTML;
-    uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '<span class="material-icons-outlined">sync</span> Đang xử lý...';
-
-    showToast(`Đang tải lên ${validFiles.length} tệp...`);
-
-    const promises = validFiles.map(async (file) => {
-        // Xác định loại file để gửi lên Cloudinary
-        const isVideo = file.type.startsWith('video/');
-        const resourceType = isVideo ? 'video' : 'image';
-
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('upload_preset', UPLOAD_PRESET);
-
-        try {
-            // URL API thay đổi tùy theo resourceType (image/upload hoặc video/upload)
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`, {
-                method: 'POST',
-                body: fd
+    const uploadButton = document.getElementById("uploadButton");
+    uploadButton.disabled = true;
+    uploadButton.textContent = `Đang tải ${validFiles.length} tệp…`;
+    try {
+        const results = await Promise.allSettled(validFiles.map(async (file) => {
+            const resourceType = file.type.startsWith("video/") ? "video" : "image";
+            const signature = await secureApi("/api/upload-signature", { resourceType });
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("api_key", signature.apiKey);
+            formData.append("timestamp", signature.timestamp);
+            formData.append("folder", signature.folder);
+            formData.append("signature", signature.signature);
+            const upload = await fetch(`https://api.cloudinary.com/v1_1/${signature.cloudName}/${resourceType}/upload`, {
+                method: "POST",
+                body: formData
             });
-
-            if (!res.ok) throw new Error("Cloudinary Error");
-
-            const data = await res.json();
-
-            // Lưu vào Firestore kèm theo trường 'type'
-            return addDoc(collection(db, "photos"), {
-                url: data.secure_url,
-                publicId: data.public_id,
-                type: resourceType, // Lưu 'image' hoặc 'video'
+            const media = await upload.json();
+            if (!upload.ok) throw new Error(media.error?.message || "Cloudinary upload failed");
+            await addDoc(collection(db, "photos"), {
+                url: media.secure_url,
+                publicId: media.public_id,
+                type: resourceType,
                 device,
                 theme,
                 subName,
                 createdAt: new Date()
             });
-        } catch (e) {
-            console.error(e);
-            showToast(`Lỗi khi tải: ${file.name}`, "error");
-            return null;
+        }));
+        const succeeded = results.filter((result) => result.status === "fulfilled").length;
+        const failed = results.length - succeeded;
+        if (succeeded) {
+            showToast(`Đã lưu ${succeeded} tệp.`);
+            resetUploadForm();
         }
-    });
-
-    try {
-        await Promise.all(promises);
-        showToast("Đã đăng tải thành công!");
+        if (failed) showToast(`${failed} tệp không thể tải lên.`, "error");
+        await loadImages();
+    } catch (error) {
+        console.error(error);
+        showToast(`Upload thất bại: ${error.message}`, "error");
     } finally {
-        uploadBtn.disabled = false;
-        uploadBtn.innerHTML = originalBtnText;
+        uploadButton.disabled = false;
+        uploadButton.innerHTML = '<span class="material-icons-outlined">send</span> Tải lên ngay';
     }
-
-    // Reset form
-    fileInput.value = "";
-    deviceInput.value = "";
-    themeInput.value = "";
-    nameInput.value = "";
-
-    const preview = document.getElementById('preview');
-    const dropText = document.getElementById('dropText');
-    const videoPreview = document.getElementById('videoPreview'); // Nếu bạn có thẻ video preview
-
-    if (preview) { preview.src = ""; preview.style.display = 'none'; }
-    if (videoPreview) { videoPreview.src = ""; videoPreview.style.display = 'none'; }
-    if (dropText) { dropText.style.display = 'block'; }
-
-    loadImages();
 };
 
-// --- HIỂN THỊ DANH SÁCH ẢNH (RENDER GALLERY) ---
+function makeTag(text) {
+    const tag = document.createElement("span");
+    tag.className = "tag-label";
+    tag.textContent = text;
+    return tag;
+}
+
+function makeAction(icon, title, handler, className = "") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.title = title;
+    button.className = className;
+    const iconNode = document.createElement("span");
+    iconNode.className = "material-icons-outlined";
+    iconNode.textContent = icon;
+    button.appendChild(iconNode);
+    button.addEventListener("click", (event) => { event.stopPropagation(); handler(); });
+    return button;
+}
+
 function renderGallery(data) {
-    const gallery = document.getElementById('gallery');
-    gallery.innerHTML = "";
+    const gallery = document.getElementById("gallery");
+    gallery.replaceChildren();
+    if (!data.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = "Chưa có hình nền phù hợp.";
+        gallery.appendChild(empty);
+        return;
+    }
 
-    data.forEach(item => {
-        const isMob = item.device?.toLowerCase().includes('mobile');
-        // Kiểm tra xem đây là video hay ảnh
-        const isVideo = item.type === 'video';
-
-        const div = document.createElement('div');
-        div.className = `card ${isMob ? 'mobile-view' : ''}`;
-
-        // Tạo tag hiển thị tương ứng (Video hoặc Ảnh)
-        let mediaHtml = "";
-        if (isVideo) {
-            mediaHtml = `
-                <video 
-                    src="${item.url}" 
-                    muted loop playsinline 
-                    onmouseover="this.play()" 
-                    onmouseout="this.pause()" 
-                    style="width:100%; height:100%; object-fit:cover; border-radius:12px;">
-                </video>`;
+    data.forEach((item) => {
+        const video = isVideo(item);
+        const card = document.createElement("article");
+        card.className = `card ${item.device?.toLowerCase().includes("mobile") ? "mobile-view" : ""}`;
+        const media = document.createElement(video ? "video" : "img");
+        if (video) {
+            media.src = item.url;
+            media.muted = true;
+            media.loop = true;
+            media.playsInline = true;
+            media.addEventListener("mouseenter", () => media.play());
+            media.addEventListener("mouseleave", () => media.pause());
         } else {
-            mediaHtml = `<img src="${getOptimizedUrl(item.url)}" loading="lazy" onload="this.classList.add('loaded')">`;
+            media.src = getOptimizedUrl(item.url);
+            media.loading = "lazy";
+            media.alt = item.subName || item.theme || "Anime wallpaper";
         }
+        card.appendChild(media);
 
-        div.innerHTML = `
-            ${mediaHtml}
-            <div class="card-overlay">
-                <div class="card-info">
-                    <span class="tag-label">${isVideo ? 'VIDEO' : item.device}</span>
-                    <span class="tag-label">#${item.theme}</span>
-                    ${item.subName ? `<span class="tag-label">${item.subName}</span>` : ''}
-                </div>
-                <div class="actions">
-                    <button onclick="event.stopPropagation(); editPhoto('${item.id}','${item.device}','${item.theme}','${item.subName || ''}')">
-                        <span class="material-icons-outlined">edit_note</span>
-                    </button>
-                    <button onclick="event.stopPropagation(); downloadImage('${item.url}', '${item.subName || item.theme}${isVideo ? '.mp4' : '.jpg'}')">
-                        <span class="material-icons-outlined">file_download</span>
-                    </button>
-                    <button class="btn-del" onclick="event.stopPropagation(); deletePhoto('${item.id}', '${item.publicId}')">
-                        <span class="material-icons-outlined">delete_sweep</span>
-                    </button>
-                </div>
-            </div>`;
-
-        div.onclick = () => {
-            if (isVideo) {
-                // Nếu là video, click vào sẽ mở link gốc trong tab mới
-                window.open(item.url, '_blank');
-            } else {
-                // Nếu là ảnh, mở Lightbox như cũ
-                document.getElementById('lightbox-img').src = item.url;
-                document.getElementById('lightbox').style.display = 'flex';
+        const overlay = document.createElement("div");
+        overlay.className = "card-overlay";
+        const info = document.createElement("div");
+        info.className = "card-info";
+        info.append(makeTag(video ? "VIDEO" : item.device || "IMAGE"), makeTag(`#${item.theme || "Khác"}`));
+        if (item.subName) info.appendChild(makeTag(item.subName));
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        actions.append(
+            makeAction("edit_note", "Sửa thông tin", () => window.editPhoto(item)),
+            makeAction("file_download", "Tải xuống", () => window.downloadImage(item.url, `${item.subName || item.theme || "anime"}${video ? ".mp4" : ".jpg"}`)),
+            makeAction("delete_sweep", "Xóa file", () => window.deletePhoto(item), "btn-del")
+        );
+        overlay.append(info, actions);
+        card.appendChild(overlay);
+        card.addEventListener("click", () => {
+            if (video) window.open(item.url, "_blank", "noopener");
+            else {
+                document.getElementById("lightbox-img").src = item.url;
+                document.getElementById("lightbox").style.display = "flex";
             }
-        };
-        gallery.appendChild(div);
+        });
+        gallery.appendChild(card);
     });
 }
 
-// --- CÁC THAO TÁC DỮ LIỆU (CRUD) ---
-// Xóa một ảnh dựa trên ID
-window.deletePhoto = async (id, publicId) => {
-    if (confirm("Bạn muốn xóa ảnh này vĩnh viễn?")) {
-        try {
-            // 1. Gọi API xóa của Cloudinary (Yêu cầu API Key)
-            // Lưu ý: publicId thường có dạng "folder/image_name"
-            const apiKey = "962206114668"; // Lấy từ config của bạn
-
-            // Trong thực tế, bạn nên dùng một Cloud Function để bảo mật API Secret.
-            // Đoạn code dưới đây minh họa logic gửi yêu cầu xóa:
-            console.log("Đang yêu cầu Cloudinary xóa ảnh:", publicId);
-
-            // 2. Xóa tài liệu trên Firestore
-            await deleteDoc(doc(db, "photos", id));
-
-            showToast("Đã xóa ảnh thành công!");
-            loadImages();
-        } catch (error) {
-            showToast("Lỗi khi xóa: " + error.message, "error");
-        }
-    }
+window.editPhoto = (item) => {
+    document.getElementById("editId").value = item.id;
+    document.getElementById("editDeviceInput").value = item.device || "";
+    document.getElementById("editThemeInput").value = item.theme || "";
+    document.getElementById("editNameInput").value = item.subName || "";
+    document.getElementById("editModal").style.display = "flex";
 };
-
-// Xóa toàn bộ ảnh trong Collection
-window.deleteAllPhotos = async () => {
-    if (confirm("CẢNH BÁO: Xóa sạch toàn bộ ảnh trên cả Cloudinary và hệ thống?")) {
-        try {
-            const snap = await getDocs(collection(db, "photos"));
-
-            const deletePromises = snap.docs.map(async (d) => {
-                const data = d.data();
-                const publicId = data.publicId; // Lấy publicId đã lưu khi upload
-
-                // 1. Logic xóa trên Cloudinary 
-                if (publicId) {
-                    console.log("Đang yêu cầu xóa file trên Cloudinary:", publicId);
-                    // Lưu ý: Cloudinary yêu cầu API Secret để thực hiện xóa hàng loạt.
-                    // Ở client-side học tập, ta chủ yếu xử lý logic dọn dẹp Database.
-                }
-
-                // 2. Xóa tài liệu trên Firestore
-                return deleteDoc(doc(db, "photos", d.id));
-            });
-
-            await Promise.all(deletePromises);
-            showToast("Đã dọn dẹp sạch sẽ thư viện!");
-            loadImages();
-        } catch (error) {
-            showToast("Lỗi khi xóa hàng loạt!", "error");
-        }
-    }
-};
-
-// Mở Modal chỉnh sửa thông tin ảnh
-window.editPhoto = (id, dev, thm, nam) => {
-    document.getElementById('editId').value = id;
-    document.getElementById('editDeviceInput').value = dev;
-    document.getElementById('editThemeInput').value = thm;
-    document.getElementById('editNameInput').value = nam;
-    document.getElementById('editModal').style.display = 'flex';
-};
-
-window.closeEditModal = () => document.getElementById('editModal').style.display = 'none';
-
-// Cập nhật thông tin mới lên Firestore
+window.closeEditModal = () => { document.getElementById("editModal").style.display = "none"; };
 window.saveEdit = async () => {
-    const id = document.getElementById('editId').value;
+    const id = document.getElementById("editId").value;
     const newData = {
-        device: document.getElementById('editDeviceInput').value.trim(),
-        theme: document.getElementById('editThemeInput').value.trim(),
-        subName: document.getElementById('editNameInput').value.trim()
+        device: document.getElementById("editDeviceInput").value.trim(),
+        theme: document.getElementById("editThemeInput").value.trim(),
+        subName: document.getElementById("editNameInput").value.trim()
     };
-
+    if (!newData.device || !newData.theme) return showToast("Thiết bị và chủ đề không được để trống.", "error");
     try {
         await updateDoc(doc(db, "photos", id), newData);
-
-        // Cập nhật lại mảng dữ liệu tạm thời (allImages) để không cần tải lại toàn bộ từ Firebase
-        const index = allImages.findIndex(img => img.id === id);
-        if (index !== -1) {
-            allImages[index] = { ...allImages[index], ...newData };
-            filteredImages = [...allImages]; // Cập nhật cả mảng đã lọc
-        }
-
-        closeEditModal();
-        showToast("Cập nhật thành công!");
-
-        // Gọi goToPage với currentPage hiện tại thay vì loadImages()
+        const index = allImages.findIndex((item) => item.id === id);
+        if (index >= 0) allImages[index] = { ...allImages[index], ...newData };
+        filteredImages = [...allImages];
+        window.closeEditModal();
         renderFilterTags();
         goToPage(currentPage);
+        showToast("Đã cập nhật thông tin.");
     } catch (error) {
-        showToast("Lỗi khi cập nhật!", "error");
+        showToast("Không thể cập nhật. Hãy kiểm tra Firebase Rules.", "error");
     }
 };
 
-// Tìm kiếm ảnh thời gian thực theo từ khóa
-window.filterImages = () => {
-    const term = document.getElementById('searchInput').value.toLowerCase();
-    filteredImages = allImages.filter(i =>
-        i.device?.toLowerCase().includes(term) || i.theme?.toLowerCase().includes(term) || i.subName?.toLowerCase().includes(term)
+async function removeOne(item) {
+    if (!item.publicId) throw new Error("Bản ghi cũ thiếu publicId; không thể xác nhận xóa file Cloudinary.");
+    await secureApi("/api/delete-media", { publicId: item.publicId, resourceType: isVideo(item) ? "video" : "image" });
+    await deleteDoc(doc(db, "photos", item.id));
+}
+
+window.deletePhoto = async (item) => {
+    if (!confirm("Xóa vĩnh viễn file khỏi Cloudinary và thư viện?")) return;
+    try {
+        await removeOne(item);
+        showToast("Đã xóa file và bản ghi.");
+        await loadImages();
+    } catch (error) {
+        console.error(error);
+        showToast(`Chưa xóa: ${error.message}`, "error");
+    }
+};
+
+window.deleteAllPhotos = async () => {
+    if (!confirm("Xóa vĩnh viễn toàn bộ file Cloudinary và mọi bản ghi?")) return;
+    try {
+        const snapshot = [...allImages];
+        for (const item of snapshot) await removeOne(item);
+        showToast(`Đã xóa ${snapshot.length} tệp.`);
+        await loadImages();
+    } catch (error) {
+        console.error(error);
+        showToast(`Đã dừng xóa để bảo toàn dữ liệu còn lại: ${error.message}`, "error");
+        await loadImages();
+    }
+};
+
+function renderFilterTags() {
+    const container = document.getElementById("dynamic-tags");
+    container.replaceChildren();
+    const allButton = document.createElement("button");
+    allButton.className = "tag-btn active";
+    allButton.textContent = `Tất cả (${allImages.length})`;
+    allButton.addEventListener("click", () => window.filterByDynamicTag("all", allButton));
+    container.appendChild(allButton);
+    const counts = new Map();
+    allImages.forEach(({ subName }) => {
+        const name = subName?.trim();
+        if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    [...counts.keys()].sort().forEach((name) => {
+        const button = document.createElement("button");
+        button.className = "tag-btn";
+        button.append(document.createTextNode(`${name} `));
+        const count = document.createElement("span");
+        count.className = "tag-count";
+        count.textContent = counts.get(name);
+        button.appendChild(count);
+        button.addEventListener("click", () => window.filterByDynamicTag(name.toLowerCase(), button));
+        container.appendChild(button);
+    });
+}
+
+window.filterByDynamicTag = (tag, button) => {
+    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
+    button?.classList.add("active");
+    const term = tag.toLowerCase();
+    filteredImages = term === "all" ? [...allImages] : allImages.filter((item) =>
+        item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
     );
     goToPage(1);
 };
-
-// Tải dữ liệu từ Firestore lúc mới mở trang
-async function loadImages(page = 1) { // Thêm tham số mặc định
-    const q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    allImages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    filteredImages = [...allImages];
-    renderFilterTags();
-    goToPage(page); // Sử dụng tham số page truyền vào
-}
-// Hiện ảnh ở layout upload
-// --- SỬA TẠI script.js (Phần xử lý Preview) ---
-document.getElementById('imageInput').addEventListener('change', function (e) {
-    const file = e.target.files[0];
-    const preview = document.getElementById('preview');
-    const videoPreview = document.getElementById('videoPreview');
-    const dropText = document.getElementById('dropText');
-
-    if (file) {
-        const reader = new FileReader();
-        const isVideo = file.type.startsWith('video/');
-
-        reader.onload = function (event) {
-            if (isVideo) {
-                // Nếu là Video: Hiển thị preview video, ẩn preview ảnh
-                videoPreview.src = event.target.result;
-                videoPreview.style.display = 'block';
-                preview.style.display = 'none';
-            } else {
-                // Nếu là Ảnh: Hiển thị preview ảnh, ẩn preview video
-                preview.src = event.target.result;
-                preview.style.display = 'block';
-                videoPreview.style.display = 'none';
-            }
-            dropText.style.display = 'none'; // Ẩn dòng chữ hướng dẫn
-        };
-
-        reader.readAsDataURL(file);
-    }
-});
-
-const backToTop = document.getElementById('backToTop');
-
-// Hiện nút khi cuộn xuống 300px
-window.addEventListener('scroll', () => {
-    if (window.scrollY > 300) {
-        backToTop.style.display = 'flex';
-    } else {
-        backToTop.style.display = 'none';
-    }
-});
-
-// Logic cuộn mượt lên đầu
-backToTop.onclick = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+window.filterByType = (type, button) => {
+    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
+    button?.classList.add("active");
+    filteredImages = allImages.filter((item) => isVideo(item) === (type === "video"));
+    goToPage(1);
 };
-
-document.addEventListener('keydown', (e) => {
-    // 1. Kiểm tra nếu người dùng đang gõ trong ô tìm kiếm hoặc ô nhập liệu thì bỏ qua
-    const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
-    if (isTyping) return;
-
-    // 2. Tính toán tổng số trang hiện tại
-    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-
-    // 3. Xử lý sự kiện nhấn phím
-    if (e.key === 'ArrowRight') {
-        // Nếu nhấn mũi tên Phải -> Sang trang sau
-        if (currentPage < totalPages) {
-            goToPage(currentPage + 1);
-        }
-    } else if (e.key === 'ArrowLeft') {
-        // Nếu nhấn mũi tên Trái -> Về trang trước
-        if (currentPage > 1) {
-            goToPage(currentPage - 1);
-        }
-    }
-});
-
-// Hàm xóa sạch thông tin sau khi đăng thành công
-function resetUploadForm() {
-    // 1. Xóa file đã chọn
-    document.getElementById('imageInput').value = "";
-
-    // 2. Xóa các ô nhập liệu
-    document.getElementById('deviceInput').value = "";
-    document.getElementById('themeInput').value = "";
-    document.getElementById('nameInput').value = "";
-
-    // 3. Ẩn tất cả preview và hiện lại dòng chữ hướng dẫn
-    const preview = document.getElementById('preview');
-    const videoPreview = document.getElementById('videoPreview');
-    const dropText = document.getElementById('dropText');
-
-    if (preview) {
-        preview.src = "";
-        preview.style.display = 'none';
-    }
-    if (videoPreview) {
-        videoPreview.src = "";
-        videoPreview.style.display = 'none';
-    }
-    if (dropText) {
-        dropText.style.display = 'block';
-    }
-}
-
-// --- HÀM LỌC THEO LOẠI (VIDEO/ẢNH) ---
-window.filterByType = (type, btn) => {
-    // 1. Cập nhật giao diện nút đang chọn (Active)
-    document.querySelectorAll('.filter-item').forEach(el => el.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-
-    // 2. Lọc dữ liệu dựa trên trường 'type'
-    // Lưu ý: type ở đây là 'video' hoặc 'image'
-    filteredImages = allImages.filter(item => {
-        if (type === 'video') {
-            return item.type === 'video' || item.url.includes('.mp4');
-        } else {
-            return item.type === 'image' || (!item.type && !item.url.includes('.mp4'));
-        }
-    });
-
-    // 3. Hiển thị lại Gallery từ trang 1
-    currentPage = 1;
-    renderFilterTags(); // Cập nhật lại các tag liên quan nếu cần
+window.filterImages = () => {
+    const term = document.getElementById("searchInput").value.trim().toLowerCase();
+    filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term)));
     goToPage(1);
 };
 
-loadImages();
+window.goToPage = function goToPage(page) {
+    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
+    if (page < 1 || (totalPages > 0 && page > totalPages)) return;
+    currentPage = page;
+    renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
+    renderPagination();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+};
+function renderPagination() {
+    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
+    const container = document.getElementById("pagination");
+    container.replaceChildren();
+    if (totalPages <= 1) return;
+    const addButton = (label, page, disabled = false, active = false) => {
+        const button = document.createElement("button");
+        button.className = `page-btn ${active ? "active" : ""}`;
+        button.innerHTML = label;
+        button.disabled = disabled;
+        button.addEventListener("click", () => goToPage(page));
+        container.appendChild(button);
+    };
+    addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
+    const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages].filter((page) => page >= 1 && page <= totalPages))]
+        .sort((a, b) => a - b);
+    pages.forEach((page, index) => {
+        if (index && page - pages[index - 1] > 1) {
+            const dots = document.createElement("span");
+            dots.className = "pagination-dots";
+            dots.textContent = "…";
+            container.appendChild(dots);
+        }
+        addButton(String(page), page, false, page === currentPage);
+    });
+    addButton('<span class="material-icons-outlined">chevron_right</span>', currentPage + 1, currentPage === totalPages);
+}
+
+async function loadImages() {
+    const gallery = document.getElementById("gallery");
+    gallery.textContent = "Đang tải thư viện…";
+    try {
+        const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
+        allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+        filteredImages = [...allImages];
+        renderFilterTags();
+        goToPage(1);
+    } catch (error) {
+        console.error(error);
+        gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra Firebase Rules.";
+    }
+}
+
+function resetUploadForm() {
+    document.getElementById("imageInput").value = "";
+    document.getElementById("deviceInput").value = "";
+    document.getElementById("themeInput").value = "";
+    document.getElementById("nameInput").value = "";
+    document.getElementById("preview").removeAttribute("src");
+    document.getElementById("preview").style.display = "none";
+    document.getElementById("videoPreview").removeAttribute("src");
+    document.getElementById("videoPreview").style.display = "none";
+    document.getElementById("dropText").style.display = "block";
+}
+
+document.getElementById("imageInput").addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const preview = document.getElementById("preview");
+    const videoPreview = document.getElementById("videoPreview");
+    const objectUrl = URL.createObjectURL(file);
+    if (file.type.startsWith("video/")) {
+        videoPreview.src = objectUrl;
+        videoPreview.style.display = "block";
+        preview.style.display = "none";
+    } else {
+        preview.src = objectUrl;
+        preview.style.display = "block";
+        videoPreview.style.display = "none";
+    }
+    document.getElementById("dropText").style.display = "none";
+});
+
+window.exportMetadata = () => {
+    const blob = new Blob([JSON.stringify(allImages, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `anime-wallpaper-metadata-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Đã xuất metadata. Hãy sao lưu file này cùng các file gốc.");
+};
+
+const backToTop = document.getElementById("backToTop");
+window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });
+backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+document.addEventListener("keydown", (event) => {
+    if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
+    if (event.key === "ArrowRight") goToPage(currentPage + 1);
+    if (event.key === "ArrowLeft") goToPage(currentPage - 1);
+});
+
+protectPage(loadImages);

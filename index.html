@@ -8,17 +8,33 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined">
-    <link rel="icon" href="logo.png" type="image/svg+xml">
+    <link rel="icon" href="logo.jpg" type="image/jpeg">
 </head>
 
 <body>
-    <div class="app-layout">
+    <section id="authGate" class="auth-gate">
+        <form id="loginForm" class="login-card">
+            <h1>Anime Wallpapers</h1>
+            <p>Đăng nhập để mở thư viện riêng của bạn.</p>
+            <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
+            <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" required></label>
+            <p id="loginError" class="login-error" aria-live="polite"></p>
+            <button class="btn-primary" type="submit">Đăng nhập</button>
+        </form>
+    </section>
+    <div id="appShell" class="app-layout" hidden>
         <aside class="sidebar">
             <div class="brand">
                 <span class="logo">Anime <b>Wallpapers</b></span>
-                <button id="darkModeToggle" class="theme-toggle">
-                    <span class="material-icons-outlined">dark_mode</span>
-                </button>
+                <div class="brand-actions">
+                    <span id="accountLabel" class="account-label"></span>
+                    <button id="darkModeToggle" class="theme-toggle" title="Đổi giao diện">
+                        <span class="material-icons-outlined">dark_mode</span>
+                    </button>
+                    <button id="signOutButton" class="theme-toggle" title="Đăng xuất">
+                        <span class="material-icons-outlined">logout</span>
+                    </button>
+                </div>
             </div>
 
             <div class="quick-filter">

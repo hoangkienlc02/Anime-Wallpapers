@@ -1,293 +1,231 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, getDocs, orderBy, query } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { db } from "./firebase-config.js";
+import { protectPage } from "./auth-gate.js";
 
-// --- CẤU HÌNH FIREBASE (Chỉ dùng quyền Read) ---
-const firebaseConfig = {
-    apiKey: "AIzaSyAKYazmv5LhCsRUlGRoYm5RSHKuV5nT24A",
-    authDomain: "images-web-8e8a0.firebaseapp.com",
-    projectId: "images-web-8e8a0",
-    storageBucket: "images-web-8e8a0.firebasestorage.app",
-    messagingSenderId: "962206114668",
-    appId: "1:962206114668:web:2178cd8a304abaddce8949"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// --- BIẾN TOÀN CỤC ---
 let allImages = [];
 let filteredImages = [];
 let currentPage = 1;
 const itemsPerPage = 20;
 
-// --- HÀM TIỆN ÍCH ---
 function getOptimizedUrl(url) {
-    if (!url || !url.includes('cloudinary')) return url;
-    return url.replace('/upload/', '/upload/f_auto,q_auto,w_800/');
+    if (!url || !url.includes("cloudinary")) return url;
+    return url.replace("/upload/", "/upload/f_auto,q_auto,w_800/");
+}
+
+function isVideo(item) {
+    return item.type === "video" || /\.(mp4|mov)(\?|$)/i.test(item.url || "");
 }
 
 window.downloadImage = async (url, filename) => {
     try {
         const response = await fetch(url);
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        if (!response.ok) throw new Error("Download failed");
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
         link.href = blobUrl;
-        link.download = filename || 'wallpaper.jpg';
+        link.download = filename || "wallpaper";
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-        window.open(url, '_blank'); 
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch {
+        window.open(url, "_blank", "noopener");
     }
 };
 
-// --- DARK MODE ---
-const darkModeToggle = document.getElementById('darkModeToggle');
-if (localStorage.getItem('theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-darkModeToggle.onclick = () => {
-    let isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    localStorage.setItem('theme', isDark ? 'light' : 'dark');
-};
+const darkModeToggle = document.getElementById("darkModeToggle");
+if (localStorage.getItem("theme") === "dark") document.documentElement.dataset.theme = "dark";
+darkModeToggle.addEventListener("click", () => {
+    const isDark = document.documentElement.dataset.theme === "dark";
+    document.documentElement.dataset.theme = isDark ? "light" : "dark";
+    localStorage.setItem("theme", isDark ? "light" : "dark");
+});
 
-// --- HIỂN THỊ GALLERY ---
+function makeTag(text) {
+    const tag = document.createElement("span");
+    tag.className = "tag-label";
+    tag.textContent = text;
+    return tag;
+}
+
+function makeAction(icon, title, handler) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.title = title;
+    const iconElement = document.createElement("span");
+    iconElement.className = "material-icons-outlined";
+    iconElement.textContent = icon;
+    button.appendChild(iconElement);
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        handler();
+    });
+    return button;
+}
+
 function renderGallery(data) {
-    const gallery = document.getElementById('gallery');
-    gallery.innerHTML = "";
-    
-    data.forEach(item => {
-        const isMob = item.device?.toLowerCase().includes('mobile');
-        // Kiểm tra loại file dựa trên trường 'type' hoặc đuôi link
-        const isVideo = item.type === 'video' || item.url.includes('.mp4') || item.url.includes('.mov');
-        
-        const div = document.createElement('div');
-        div.className = `card ${isMob ? 'mobile-view' : ''}`;
-        
-        // Hiển thị Video hoặc Ảnh
-        let mediaHtml = "";
-        if (isVideo) {
-            mediaHtml = `
-                <video 
-                    src="${item.url}" 
-                    muted loop playsinline 
-                    onmouseover="this.play()" 
-                    onmouseout="this.pause()" 
-                    style="width:100%; height:100%; object-fit:cover; border-radius:12px; display:block;">
-                </video>`;
-        } else {
-            mediaHtml = `<img src="${getOptimizedUrl(item.url)}" loading="lazy">`;
-        }
-        
-        div.innerHTML = `
-            ${mediaHtml}
-            <div class="card-overlay">
-                <div class="card-info">
-                    <span class="tag-label">${isVideo ? 'VIDEO' : item.device}</span>
-                    <span class="tag-label">#${item.theme}</span>
-                    ${item.subName ? `<span class="tag-label">${item.subName}</span>` : ''}
-                </div>
-                <div class="actions">
-                    <button title="Tải xuống" onclick="event.stopPropagation(); downloadImage('${item.url}', '${item.subName || 'anime'}${isVideo ? '.mp4' : '.jpg'}')">
-                        <span class="material-icons-outlined">file_download</span>
-                    </button>
-                </div>
-            </div>`;
-            
-        div.onclick = () => { 
-            if (isVideo) {
-                // Với video, click vào sẽ mở tab mới để xem full hoặc tải
-                window.open(item.url, '_blank');
-            } else {
-                // Với ảnh, mở lightbox như bình thường
-                document.getElementById('lightbox-img').src = item.url; 
-                document.getElementById('lightbox').style.display = 'flex'; 
-            }
-        };
-        gallery.appendChild(div);
-    });
-}
-
-// --- LỌC VÀ TÌM KIẾM ---
-function renderFilterTags() {
-    const container = document.getElementById('dynamic-tags');
-    container.innerHTML = `<button class="tag-btn active" onclick="filterByDynamicTag('all', this)">Tất cả (${allImages.length})</button>`;
-
-    const nameCounts = {};
-    allImages.forEach(img => {
-        if (img.subName) {
-            const name = img.subName.trim();
-            if (name) nameCounts[name] = (nameCounts[name] || 0) + 1;
-        }
-    });
-
-    Object.keys(nameCounts).sort().forEach(name => {
-        const btn = document.createElement('button');
-        btn.className = 'tag-btn';
-        btn.innerHTML = `${name} <span class="tag-count">${nameCounts[name]}</span>`;
-        btn.onclick = () => filterByDynamicTag(name.toLowerCase(), btn);
-        container.appendChild(btn);
-    });
-}
-
-window.filterByDynamicTag = (tag, btn) => {
-    // Xóa trạng thái active của TẤT CẢ các nút lọc
-    document.querySelectorAll('.tag-btn, .filter-item').forEach(b => b.classList.remove('active'));
-    
-    // Thêm active cho nút vừa ấn
-    if (btn) btn.classList.add('active');
-
-    const term = tag.toLowerCase();
-
-    if (term === 'all') {
-        filteredImages = [...allImages];
-    } else {
-        // Logic lọc: Tìm trong subName, device hoặc theme
-        filteredImages = allImages.filter(i => 
-            i.subName?.toLowerCase().includes(term) ||
-            i.device?.toLowerCase() === term || 
-            i.theme?.toLowerCase() === term
-        );
+    const gallery = document.getElementById("gallery");
+    gallery.replaceChildren();
+    if (data.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = "Không tìm thấy hình nền phù hợp.";
+        gallery.appendChild(empty);
+        return;
     }
-    currentPage = 1;
-    goToPage(1);
-};
 
-// --- HÀM LỌC THEO LOẠI (VIDEO/ẢNH) ---
-window.filterByType = (type, btn) => {
-    // 1. Cập nhật giao diện nút đang chọn (Active)
-    document.querySelectorAll('.filter-item').forEach(el => el.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-
-    // 2. Lọc dữ liệu dựa trên trường 'type'
-    // Lưu ý: type ở đây là 'video' hoặc 'image'
-    filteredImages = allImages.filter(item => {
-        if (type === 'video') {
-            return item.type === 'video' || item.url.includes('.mp4');
+    data.forEach((item) => {
+        const video = isVideo(item);
+        const card = document.createElement("article");
+        card.className = `card ${item.device?.toLowerCase().includes("mobile") ? "mobile-view" : ""}`;
+        const media = document.createElement(video ? "video" : "img");
+        if (video) {
+            media.src = item.url;
+            media.muted = true;
+            media.loop = true;
+            media.playsInline = true;
+            media.addEventListener("mouseenter", () => media.play());
+            media.addEventListener("mouseleave", () => media.pause());
         } else {
-            return item.type === 'image' || (!item.type && !item.url.includes('.mp4'));
+            media.src = getOptimizedUrl(item.url);
+            media.loading = "lazy";
+            media.alt = item.subName || item.theme || "Anime wallpaper";
         }
+        card.appendChild(media);
+
+        const overlay = document.createElement("div");
+        overlay.className = "card-overlay";
+        const info = document.createElement("div");
+        info.className = "card-info";
+        info.append(makeTag(video ? "VIDEO" : item.device || "IMAGE"), makeTag(`#${item.theme || "Khác"}`));
+        if (item.subName) info.appendChild(makeTag(item.subName));
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        actions.appendChild(makeAction("file_download", "Tải xuống", () => {
+            window.downloadImage(item.url, `${item.subName || item.theme || "anime"}${video ? ".mp4" : ".jpg"}`);
+        }));
+        overlay.append(info, actions);
+        card.appendChild(overlay);
+        card.addEventListener("click", () => {
+            if (video) window.open(item.url, "_blank", "noopener");
+            else {
+                document.getElementById("lightbox-img").src = item.url;
+                document.getElementById("lightbox").style.display = "flex";
+            }
+        });
+        gallery.appendChild(card);
     });
+}
 
-    // 3. Hiển thị lại Gallery từ trang 1
-    currentPage = 1;
-    renderFilterTags(); // Cập nhật lại các tag liên quan nếu cần
-    goToPage(1);
-};
+function renderFilterTags() {
+    const container = document.getElementById("dynamic-tags");
+    container.replaceChildren();
+    const allButton = document.createElement("button");
+    allButton.className = "tag-btn active";
+    allButton.textContent = `Tất cả (${allImages.length})`;
+    allButton.addEventListener("click", () => window.filterByDynamicTag("all", allButton));
+    container.appendChild(allButton);
 
-window.filterImages = () => {
-    const term = document.getElementById('searchInput').value.toLowerCase();
-    filteredImages = allImages.filter(i => 
-        i.device?.toLowerCase().includes(term) || i.theme?.toLowerCase().includes(term) || i.subName?.toLowerCase().includes(term)
+    const counts = new Map();
+    allImages.forEach(({ subName }) => {
+        const name = subName?.trim();
+        if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    [...counts.keys()].sort().forEach((name) => {
+        const button = document.createElement("button");
+        button.className = "tag-btn";
+        button.append(document.createTextNode(`${name} `));
+        const count = document.createElement("span");
+        count.className = "tag-count";
+        count.textContent = counts.get(name);
+        button.appendChild(count);
+        button.addEventListener("click", () => window.filterByDynamicTag(name.toLowerCase(), button));
+        container.appendChild(button);
+    });
+}
+
+window.filterByDynamicTag = (tag, button) => {
+    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
+    button?.classList.add("active");
+    const term = tag.toLowerCase();
+    filteredImages = term === "all" ? [...allImages] : allImages.filter((item) =>
+        item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
     );
     goToPage(1);
 };
 
-// --- PHÂN TRANG ---
-window.goToPage = (page) => {
+window.filterByType = (type, button) => {
+    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
+    button?.classList.add("active");
+    filteredImages = allImages.filter((item) => isVideo(item) === (type === "video"));
+    goToPage(1);
+};
+
+window.filterImages = () => {
+    const term = document.getElementById("searchInput").value.trim().toLowerCase();
+    filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term)));
+    goToPage(1);
+};
+
+window.goToPage = function goToPage(page) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-    if (page < 1 || (page > totalPages && totalPages > 0)) return;
+    if (page < 1 || (totalPages > 0 && page > totalPages)) return;
     currentPage = page;
-    const start = (currentPage - 1) * itemsPerPage;
-    renderGallery(filteredImages.slice(start, start + itemsPerPage));
+    renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 function renderPagination() {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-    const container = document.getElementById('pagination');
-    container.innerHTML = '';
-
-    // Nếu không có ảnh hoặc chỉ có 1 trang thì không hiện phân trang
+    const container = document.getElementById("pagination");
+    container.replaceChildren();
     if (totalPages <= 1) return;
-
-    // --- Nút TRƯỚC (Prev) ---
-    const prevBtn = document.createElement('button');
-    prevBtn.innerHTML = '<span class="material-icons-outlined">chevron_left</span>';
-    prevBtn.className = `page-btn ${currentPage === 1 ? 'disabled' : ''}`;
-    prevBtn.disabled = currentPage === 1;
-    prevBtn.onclick = () => goToPage(currentPage - 1);
-    container.appendChild(prevBtn);
-
-    // --- Logic hiển thị số trang và dấu ba chấm ---
-    const range = 1; 
-    let pages = [];
-    pages.push(1);
-    for (let i = currentPage - range; i <= currentPage + range; i++) {
-        if (i > 1 && i < totalPages) pages.push(i);
-    }
-    if (totalPages > 1) pages.push(totalPages);
-    pages = [...new Set(pages)].sort((a, b) => a - b);
-
+    const addButton = (label, page, disabled = false, active = false) => {
+        const button = document.createElement("button");
+        button.className = `page-btn ${active ? "active" : ""}`;
+        button.innerHTML = label;
+        button.disabled = disabled;
+        button.addEventListener("click", () => goToPage(page));
+        container.appendChild(button);
+    };
+    addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
+    const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages].filter((page) => page >= 1 && page <= totalPages))]
+        .sort((a, b) => a - b);
     pages.forEach((page, index) => {
-        if (index > 0 && page - pages[index - 1] > 1) {
-            const dots = document.createElement('span');
-            dots.innerText = '...';
-            dots.className = 'pagination-dots';
+        if (index && page - pages[index - 1] > 1) {
+            const dots = document.createElement("span");
+            dots.className = "pagination-dots";
+            dots.textContent = "…";
             container.appendChild(dots);
         }
-
-        const btn = document.createElement('button');
-        btn.innerText = page;
-        btn.className = `page-btn ${page === currentPage ? 'active' : ''}`;
-        btn.onclick = () => goToPage(page);
-        container.appendChild(btn);
+        addButton(String(page), page, false, page === currentPage);
     });
-
-    // --- Nút SAU (Next) ---
-    const nextBtn = document.createElement('button');
-    nextBtn.innerHTML = '<span class="material-icons-outlined">chevron_right</span>';
-    nextBtn.className = `page-btn ${currentPage === totalPages ? 'disabled' : ''}`;
-    nextBtn.disabled = currentPage === totalPages;
-    nextBtn.onclick = () => goToPage(currentPage + 1);
-    container.appendChild(nextBtn);
+    addButton('<span class="material-icons-outlined">chevron_right</span>', currentPage + 1, currentPage === totalPages);
 }
 
-// --- KHỞI TẠO ---
 async function loadImages() {
-    const q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    allImages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    filteredImages = [...allImages];
-    renderFilterTags();
-    goToPage(1);
+    const gallery = document.getElementById("gallery");
+    gallery.textContent = "Đang tải thư viện…";
+    try {
+        const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
+        allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+        filteredImages = [...allImages];
+        renderFilterTags();
+        goToPage(1);
+    } catch (error) {
+        console.error(error);
+        gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra quyền truy cập Firebase.";
+    }
 }
 
-loadImages();
-
-// Nút Back to Top
-const backToTop = document.getElementById('backToTop');
-window.addEventListener('scroll', () => {
-    backToTop.style.display = window.scrollY > 300 ? 'flex' : 'none';
+const backToTop = document.getElementById("backToTop");
+window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });
+backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+document.addEventListener("keydown", (event) => {
+    if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
+    if (event.key === "ArrowRight") goToPage(currentPage + 1);
+    if (event.key === "ArrowLeft") goToPage(currentPage - 1);
 });
-backToTop.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-// Logic cuộn mượt lên đầu
-backToTop.onclick = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-document.addEventListener('keydown', (e) => {
-    // 1. Kiểm tra nếu người dùng đang gõ trong ô tìm kiếm hoặc ô nhập liệu thì bỏ qua
-    const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
-    if (isTyping) return;
-
-    // 2. Tính toán tổng số trang hiện tại
-    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-
-    // 3. Xử lý sự kiện nhấn phím
-    if (e.key === 'ArrowRight') {
-        // Nếu nhấn mũi tên Phải -> Sang trang sau
-        if (currentPage < totalPages) {
-            goToPage(currentPage + 1);
-        }
-    } else if (e.key === 'ArrowLeft') {
-        // Nếu nhấn mũi tên Trái -> Về trang trước
-        if (currentPage > 1) {
-            goToPage(currentPage - 1);
-        }
-    }
-});
-loadImages();
+protectPage(loadImages);

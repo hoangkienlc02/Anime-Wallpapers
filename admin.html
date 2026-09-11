@@ -12,13 +12,29 @@
 </head>
 
 <body>
-    <div class="app-layout">
+    <section id="authGate" class="auth-gate">
+        <form id="loginForm" class="login-card">
+            <h1>Anime Wallpapers</h1>
+            <p>Đăng nhập bằng tài khoản Firebase của bạn.</p>
+            <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
+            <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" required></label>
+            <p id="loginError" class="login-error" aria-live="polite"></p>
+            <button class="btn-primary" type="submit">Đăng nhập</button>
+        </form>
+    </section>
+    <div id="appShell" class="app-layout" hidden>
         <aside class="sidebar">
             <div class="brand">
                 <span class="logo">Anime <b>Wallpapers</b></span>
-                <button id="darkModeToggle" class="theme-toggle">
-                    <span class="material-icons-outlined">dark_mode</span>
-                </button>
+                <div class="brand-actions">
+                    <span id="accountLabel" class="account-label"></span>
+                    <button id="darkModeToggle" class="theme-toggle" title="Đổi giao diện">
+                        <span class="material-icons-outlined">dark_mode</span>
+                    </button>
+                    <button id="signOutButton" class="theme-toggle" title="Đăng xuất">
+                        <span class="material-icons-outlined">logout</span>
+                    </button>
+                </div>
             </div>
 
             <div class="quick-filter">
@@ -68,12 +84,16 @@
                     <input type="text" id="nameInput" placeholder="Tên cụ thể (Luffy, Jinx...)">
                 </div>
 
-                <button class="btn-primary" onclick="handleUpload()">
+                <button id="uploadButton" class="btn-primary" onclick="handleUpload()">
                     <span class="material-icons-outlined">send</span> Tải lên ngay
                 </button>
             </div>
 
             <div class="danger-zone">
+                <button class="btn-delete-all" onclick="exportMetadata()">
+                    <span class="material-icons-outlined">download</span>
+                    <span>Xuất metadata sao lưu</span>
+                </button>
                 <button class="btn-delete-all" onclick="deleteAllPhotos()">
                     <span class="material-icons-outlined">delete_forever</span>
                     <span>Xóa tất cả ảnh</span>
