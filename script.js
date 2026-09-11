@@ -33,7 +33,13 @@ async function secureApi(path, payload) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
     });
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+        data = JSON.parse(responseText);
+    } catch {
+        throw new Error(`Máy chủ upload trả về dữ liệu không hợp lệ (HTTP ${response.status}). Hãy kiểm tra Vercel API.`);
+    }
     if (!response.ok) throw new Error(data.error || "Yêu cầu bảo mật thất bại.");
     return data;
 }
@@ -64,6 +70,38 @@ darkModeToggle.addEventListener("click", () => {
     localStorage.setItem("theme", isDark ? "light" : "dark");
 });
 
+async function uploadOneFile(file, metadata) {
+    const resourceType = file.type.startsWith("video/") ? "video" : "image";
+    const signature = await secureApi("/api/upload-signature", { resourceType });
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("api_key", signature.apiKey);
+    formData.append("timestamp", signature.timestamp);
+    formData.append("folder", signature.folder);
+    formData.append("signature", signature.signature);
+
+    const upload = await fetch(`https://api.cloudinary.com/v1_1/${signature.cloudName}/${resourceType}/upload`, {
+        method: "POST",
+        body: formData
+    });
+    const responseText = await upload.text();
+    let media;
+    try {
+        media = JSON.parse(responseText);
+    } catch {
+        throw new Error(`Cloudinary trả về dữ liệu không hợp lệ (HTTP ${upload.status}).`);
+    }
+    if (!upload.ok) throw new Error(media.error?.message || `Cloudinary từ chối tệp (HTTP ${upload.status}).`);
+
+    await addDoc(collection(db, "photos"), {
+        url: media.secure_url,
+        publicId: media.public_id,
+        type: resourceType,
+        ...metadata,
+        createdAt: new Date()
+    });
+}
+
 window.handleUpload = async () => {
     const fileInput = document.getElementById("imageInput");
     const device = document.getElementById("deviceInput").value.trim();
@@ -85,47 +123,36 @@ window.handleUpload = async () => {
 
     const uploadButton = document.getElementById("uploadButton");
     uploadButton.disabled = true;
-    uploadButton.textContent = `Đang tải ${validFiles.length} tệp…`;
+    const metadata = { device, theme, subName };
+    let succeeded = 0;
+    const failures = [];
     try {
-        const results = await Promise.allSettled(validFiles.map(async (file) => {
-            const resourceType = file.type.startsWith("video/") ? "video" : "image";
-            const signature = await secureApi("/api/upload-signature", { resourceType });
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("api_key", signature.apiKey);
-            formData.append("timestamp", signature.timestamp);
-            formData.append("folder", signature.folder);
-            formData.append("signature", signature.signature);
-            const upload = await fetch(`https://api.cloudinary.com/v1_1/${signature.cloudName}/${resourceType}/upload`, {
-                method: "POST",
-                body: formData
-            });
-            const media = await upload.json();
-            if (!upload.ok) throw new Error(media.error?.message || "Cloudinary upload failed");
-            await addDoc(collection(db, "photos"), {
-                url: media.secure_url,
-                publicId: media.public_id,
-                type: resourceType,
-                device,
-                theme,
-                subName,
-                createdAt: new Date()
-            });
-        }));
-        const succeeded = results.filter((result) => result.status === "fulfilled").length;
-        const failed = results.length - succeeded;
+        for (const [index, file] of validFiles.entries()) {
+            uploadButton.innerHTML = `<span class="material-icons-outlined">cloud_upload</span> ĐANG TẢI ${index + 1}/${validFiles.length}`;
+            try {
+                await uploadOneFile(file, metadata);
+                succeeded += 1;
+            } catch (error) {
+                console.error(`Không thể tải ${file.name}:`, error);
+                failures.push({ name: file.name, message: error.message || "Lỗi không xác định" });
+            }
+        }
+        const failed = failures.length;
         if (succeeded) {
             showToast(`Đã lưu ${succeeded} tệp.`);
             resetUploadForm();
         }
-        if (failed) showToast(`${failed} tệp không thể tải lên.`, "error");
+        if (failed) {
+            const firstFailure = failures[0];
+            showToast(`${failed} tệp lỗi. ${firstFailure.name}: ${firstFailure.message}`, "error");
+        }
         await loadImages();
     } catch (error) {
         console.error(error);
         showToast(`Upload thất bại: ${error.message}`, "error");
     } finally {
         uploadButton.disabled = false;
-        uploadButton.innerHTML = '<span class="material-icons-outlined">send</span> Tải lên ngay';
+        uploadButton.innerHTML = '<span class="material-icons-outlined">cloud_upload</span> ĐƯA VÀO ARCHIVE';
     }
 };
 
@@ -366,32 +393,49 @@ async function loadImages() {
 }
 
 function resetUploadForm() {
+    const preview = document.getElementById("preview");
+    const videoPreview = document.getElementById("videoPreview");
+    if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+    if (videoPreview.dataset.objectUrl) URL.revokeObjectURL(videoPreview.dataset.objectUrl);
     document.getElementById("imageInput").value = "";
     document.getElementById("deviceInput").value = "";
     document.getElementById("themeInput").value = "";
     document.getElementById("nameInput").value = "";
-    document.getElementById("preview").removeAttribute("src");
-    document.getElementById("preview").style.display = "none";
-    document.getElementById("videoPreview").removeAttribute("src");
-    document.getElementById("videoPreview").style.display = "none";
+    document.getElementById("selectedFilesInfo").textContent = "";
+    preview.removeAttribute("src");
+    preview.removeAttribute("data-object-url");
+    preview.style.display = "none";
+    videoPreview.removeAttribute("src");
+    videoPreview.removeAttribute("data-object-url");
+    videoPreview.style.display = "none";
     document.getElementById("dropText").style.display = "block";
 }
 
 document.getElementById("imageInput").addEventListener("change", (event) => {
-    const file = event.target.files[0];
+    const files = [...event.target.files];
+    const file = files[0];
     if (!file) return;
     const preview = document.getElementById("preview");
     const videoPreview = document.getElementById("videoPreview");
+    if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+    if (videoPreview.dataset.objectUrl) URL.revokeObjectURL(videoPreview.dataset.objectUrl);
     const objectUrl = URL.createObjectURL(file);
     if (file.type.startsWith("video/")) {
         videoPreview.src = objectUrl;
+        videoPreview.dataset.objectUrl = objectUrl;
         videoPreview.style.display = "block";
+        preview.removeAttribute("data-object-url");
         preview.style.display = "none";
     } else {
         preview.src = objectUrl;
+        preview.dataset.objectUrl = objectUrl;
         preview.style.display = "block";
+        videoPreview.removeAttribute("data-object-url");
         videoPreview.style.display = "none";
     }
+    const totalSize = files.reduce((sum, selectedFile) => sum + selectedFile.size, 0);
+    const sizeInMb = (totalSize / 1024 / 1024).toFixed(totalSize >= 10 * 1024 * 1024 ? 0 : 1);
+    document.getElementById("selectedFilesInfo").textContent = `${files.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp đầu tiên`;
     document.getElementById("dropText").style.display = "none";
 });
 

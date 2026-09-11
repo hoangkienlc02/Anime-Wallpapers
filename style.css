@@ -123,6 +123,8 @@ button { color: inherit; }
 .drop-zone > .material-icons-outlined { color: var(--accent); font-size: 42px; }
 .drop-zone p { margin: 12px 0 6px; font-family: "Barlow Condensed", sans-serif; font-size: 1.4rem; font-weight: 700; }
 .drop-zone small { color: var(--muted); }
+.selected-files-info { position: absolute; z-index: 3; right: 14px; bottom: 12px; max-width: calc(100% - 28px); margin: 0 !important; padding: 7px 10px; color: #fff; background: rgba(2, 14, 15, .8); font-family: Inter, sans-serif !important; font-size: .78rem !important; font-weight: 600 !important; line-height: 1.35; pointer-events: none; }
+.selected-files-info:empty { display: none; }
 .drop-zone input { position: absolute; inset: 0; z-index: 2; opacity: 0; cursor: pointer; }
 #preview, #videoPreview { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; margin: 0; object-fit: contain; background: #020e0f; }
 .metadata-panel { display: flex; flex-direction: column; justify-content: space-between; }
