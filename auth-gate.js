@@ -17,12 +17,25 @@ export function protectPage(onReady) {
     const accountLabel = document.getElementById("accountLabel");
     let hasStarted = false;
 
+    async function revealApp(user) {
+        gate.hidden = true;
+        appShell.hidden = false;
+        accountLabel.textContent = user.email || "Đã đăng nhập";
+
+        if (!hasStarted) {
+            hasStarted = true;
+            await onReady(user);
+        }
+    }
+
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
         error.textContent = "";
         try {
-            await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
+            const credential = await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
             passwordInput.value = "";
+            // Reveal immediately; onAuthStateChanged below also handles restored sessions.
+            await revealApp(credential.user);
         } catch (err) {
             console.error("Firebase sign-in failed:", err.code, err.message);
             const messages = {
@@ -47,14 +60,7 @@ export function protectPage(onReady) {
             return;
         }
 
-        gate.hidden = true;
-        appShell.hidden = false;
-        accountLabel.textContent = user.email || "Đã đăng nhập";
-
-        if (!hasStarted) {
-            hasStarted = true;
-            await onReady(user);
-        }
+        await revealApp(user);
     });
 }
 
