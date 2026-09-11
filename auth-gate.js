@@ -24,7 +24,17 @@ export function protectPage(onReady) {
             await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
             passwordInput.value = "";
         } catch (err) {
-            error.textContent = "Không thể đăng nhập. Hãy kiểm tra email và mật khẩu.";
+            console.error("Firebase sign-in failed:", err.code, err.message);
+            const messages = {
+                "auth/invalid-credential": "Email hoặc mật khẩu Firebase Authentication không đúng.",
+                "auth/user-not-found": "Không tìm thấy user này trong Firebase Authentication.",
+                "auth/wrong-password": "Mật khẩu Firebase Authentication không đúng.",
+                "auth/operation-not-allowed": "Email/Password chưa được bật trong Firebase Authentication.",
+                "auth/unauthorized-domain": "Domain hiện tại chưa được cho phép trong Firebase Authentication.",
+                "auth/network-request-failed": "Không kết nối được tới Firebase. Hãy kiểm tra mạng hoặc tiện ích chặn quảng cáo.",
+                "auth/too-many-requests": "Bạn đã thử quá nhiều lần. Chờ vài phút rồi thử lại."
+            };
+            error.textContent = messages[err.code] || `Không thể đăng nhập (${err.code || "lỗi không xác định"}).`;
         }
     });
 
