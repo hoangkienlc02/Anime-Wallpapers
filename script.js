@@ -5,6 +5,8 @@ import { getIdToken, protectPage } from "./auth-gate.js";
 let allImages = [];
 let filteredImages = [];
 let currentPage = 1;
+let selectedFiles = [];
+let metadataDrafts = [];
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -123,7 +125,7 @@ function readFileMetadata(index) {
 }
 
 window.handleUpload = async () => {
-    const files = [...document.getElementById("imageInput").files];
+    const files = [...selectedFiles];
     if (!files.length) {
         showToast("Hãy chọn ít nhất một tệp.", "error");
         return;
@@ -280,7 +282,7 @@ window.saveEdit = async () => {
         filteredImages = [...allImages];
         window.closeEditModal();
         renderFilterTags();
-        goToPage(currentPage);
+        goToPage(currentPage, { scroll: false });
         showToast("Đã cập nhật thông tin.");
     } catch (error) {
         showToast("Không thể cập nhật. Hãy kiểm tra Firebase Rules.", "error");
@@ -352,27 +354,27 @@ window.filterByDynamicTag = (tag, button) => {
     filteredImages = term === "all" ? [...allImages] : allImages.filter((item) =>
         item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
     );
-    goToPage(1);
+    goToPage(1, { scroll: false });
 };
 window.filterByType = (type, button) => {
     document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
     button?.classList.add("active");
     filteredImages = allImages.filter((item) => isVideo(item) === (type === "video"));
-    goToPage(1);
+    goToPage(1, { scroll: false });
 };
 window.filterImages = () => {
     const term = document.getElementById("searchInput").value.trim().toLowerCase();
     filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term)));
-    goToPage(1);
+    goToPage(1, { scroll: false });
 };
 
-window.goToPage = function goToPage(page) {
+window.goToPage = function goToPage(page, { scroll = true } = {}) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1 || (totalPages > 0 && page > totalPages)) return;
     currentPage = page;
     renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
 };
 function renderPagination() {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
@@ -410,23 +412,49 @@ async function loadImages() {
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         filteredImages = [...allImages];
         renderFilterTags();
-        goToPage(1);
+        goToPage(1, { scroll: false });
     } catch (error) {
         console.error(error);
         gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra Firebase Rules.";
     }
 }
 
-function addMetadataInput(card, labelText, field, placeholder, required = false) {
+function addMetadataInput(card, labelText, field, placeholder, value = "", required = false) {
     const label = document.createElement("label");
     label.textContent = labelText;
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = placeholder;
+    input.value = value;
     input.dataset.field = field;
     input.required = required;
     label.appendChild(input);
     card.appendChild(label);
+}
+
+function captureMetadataDrafts() {
+    return selectedFiles.map((_, index) => readFileMetadata(index) || { device: "", theme: "", subName: "" });
+}
+
+function syncFileInput() {
+    const transfer = new DataTransfer();
+    selectedFiles.forEach((file) => transfer.items.add(file));
+    document.getElementById("imageInput").files = transfer.files;
+}
+
+function createFilePreview(file) {
+    const media = document.createElement(file.type.startsWith("video/") ? "video" : "img");
+    media.className = "file-metadata-preview";
+    media.alt = file.name;
+    media.muted = true;
+    media.playsInline = true;
+    media.preload = "metadata";
+    const objectUrl = URL.createObjectURL(file);
+    media.src = objectUrl;
+    const releaseUrl = () => URL.revokeObjectURL(objectUrl);
+    media.addEventListener(file.type.startsWith("video/") ? "loadeddata" : "load", releaseUrl, { once: true });
+    media.addEventListener("error", releaseUrl, { once: true });
+    return media;
 }
 
 function renderFileMetadataFields(files) {
@@ -446,66 +474,92 @@ function renderFileMetadataFields(files) {
         card.dataset.fileIndex = index;
         const heading = document.createElement("div");
         heading.className = "file-metadata-heading";
+        heading.appendChild(createFilePreview(file));
+        const title = document.createElement("div");
+        title.className = "file-metadata-title";
         const order = document.createElement("span");
         order.textContent = `TỆP ${index + 1}`;
         const name = document.createElement("strong");
         name.textContent = file.name;
-        heading.append(order, name);
+        title.append(order, name);
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "remove-selected-file";
+        removeButton.title = `Bỏ ${file.name} khỏi danh sách`;
+        removeButton.setAttribute("aria-label", removeButton.title);
+        removeButton.innerHTML = '<span class="material-icons-outlined">close</span>';
+        removeButton.addEventListener("click", () => window.removeSelectedFile(index));
+        heading.append(title, removeButton);
         card.appendChild(heading);
-        addMetadataInput(card, "THIẾT BỊ", "device", "Mobile hoặc PC", true);
-        addMetadataInput(card, "CHỦ ĐỀ", "theme", "Anime, Game...", true);
-        addMetadataInput(card, "NHÂN VẬT / TÊN", "subName", "Ví dụ: Luffy, Jinx");
+        const draft = metadataDrafts[index] || {};
+        addMetadataInput(card, "THIẾT BỊ", "device", "Mobile hoặc PC", draft.device, true);
+        addMetadataInput(card, "CHỦ ĐỀ", "theme", "Anime, Game...", draft.theme, true);
+        addMetadataInput(card, "NHÂN VẬT / TÊN", "subName", "Ví dụ: Luffy, Jinx", draft.subName);
         list.appendChild(card);
     });
 }
 
-function resetUploadForm() {
+function renderMainPreview() {
     const preview = document.getElementById("preview");
     const videoPreview = document.getElementById("videoPreview");
     if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
     if (videoPreview.dataset.objectUrl) URL.revokeObjectURL(videoPreview.dataset.objectUrl);
-    document.getElementById("imageInput").value = "";
-    renderFileMetadataFields([]);
-    document.getElementById("selectedFilesInfo").textContent = "";
     preview.removeAttribute("src");
     preview.removeAttribute("data-object-url");
     preview.style.display = "none";
     videoPreview.removeAttribute("src");
     videoPreview.removeAttribute("data-object-url");
     videoPreview.style.display = "none";
-    document.getElementById("dropText").style.display = "block";
-}
 
-document.getElementById("imageInput").addEventListener("change", (event) => {
-    const files = [...event.target.files];
-    const file = files[0];
-    if (!file) {
-        renderFileMetadataFields([]);
-        return;
-    }
-    const preview = document.getElementById("preview");
-    const videoPreview = document.getElementById("videoPreview");
-    if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
-    if (videoPreview.dataset.objectUrl) URL.revokeObjectURL(videoPreview.dataset.objectUrl);
-    const objectUrl = URL.createObjectURL(file);
-    if (file.type.startsWith("video/")) {
+    const firstFile = selectedFiles[0];
+    if (!firstFile) return;
+    const objectUrl = URL.createObjectURL(firstFile);
+    if (firstFile.type.startsWith("video/")) {
         videoPreview.src = objectUrl;
         videoPreview.dataset.objectUrl = objectUrl;
         videoPreview.style.display = "block";
-        preview.removeAttribute("data-object-url");
-        preview.style.display = "none";
     } else {
         preview.src = objectUrl;
         preview.dataset.objectUrl = objectUrl;
         preview.style.display = "block";
-        videoPreview.removeAttribute("data-object-url");
-        videoPreview.style.display = "none";
     }
-    const totalSize = files.reduce((sum, selectedFile) => sum + selectedFile.size, 0);
+}
+
+function refreshUploadSelection() {
+    renderMainPreview();
+    renderFileMetadataFields(selectedFiles);
+    const selectedInfo = document.getElementById("selectedFilesInfo");
+    const dropText = document.getElementById("dropText");
+    if (!selectedFiles.length) {
+        selectedInfo.textContent = "";
+        dropText.style.display = "block";
+        return;
+    }
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
     const sizeInMb = (totalSize / 1024 / 1024).toFixed(totalSize >= 10 * 1024 * 1024 ? 0 : 1);
-    document.getElementById("selectedFilesInfo").textContent = `${files.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp đầu tiên`;
-    renderFileMetadataFields(files);
-    document.getElementById("dropText").style.display = "none";
+    selectedInfo.textContent = `${selectedFiles.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp đầu tiên`;
+    dropText.style.display = "none";
+}
+
+window.removeSelectedFile = (index) => {
+    metadataDrafts = captureMetadataDrafts();
+    selectedFiles.splice(index, 1);
+    metadataDrafts.splice(index, 1);
+    syncFileInput();
+    refreshUploadSelection();
+};
+
+function resetUploadForm() {
+    selectedFiles = [];
+    metadataDrafts = [];
+    document.getElementById("imageInput").value = "";
+    refreshUploadSelection();
+}
+
+document.getElementById("imageInput").addEventListener("change", (event) => {
+    selectedFiles = [...event.target.files];
+    metadataDrafts = [];
+    refreshUploadSelection();
 });
 
 window.exportMetadata = () => {
