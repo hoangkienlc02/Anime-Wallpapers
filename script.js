@@ -73,6 +73,24 @@ darkModeToggle.addEventListener("click", () => {
     localStorage.setItem("theme", isDark ? "light" : "dark");
 });
 
+async function getFileTechnicalMetadata(file) {
+    const base = { fileSizeBytes: file.size };
+    if (!/^(image|video)\//.test(file.type)) return base;
+    const objectUrl = URL.createObjectURL(file);
+    try {
+        const dimensions = await new Promise((resolve) => {
+            const media = file.type.startsWith("video/") ? document.createElement("video") : new Image();
+            const readyEvent = file.type.startsWith("video/") ? "loadedmetadata" : "load";
+            media.addEventListener(readyEvent, () => resolve({ width: media.videoWidth || media.naturalWidth, height: media.videoHeight || media.naturalHeight }), { once: true });
+            media.addEventListener("error", () => resolve({}), { once: true });
+            media.src = objectUrl;
+        });
+        return { ...base, ...dimensions };
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+}
+
 async function uploadOneFile(file, metadata) {
     const resourceType = file.type.startsWith("video/") ? "video" : "image";
     const signature = await secureApi("/api/upload-signature", { resourceType });
@@ -158,7 +176,8 @@ window.handleUpload = async () => {
             const { file, metadata } = item;
             uploadButton.innerHTML = `<span class="material-icons-outlined">cloud_upload</span> ĐANG TẢI ${index + 1}/${uploadQueue.length}`;
             try {
-                await uploadOneFile(file, metadata);
+                const technicalMetadata = await getFileTechnicalMetadata(file);
+                await uploadOneFile(file, { ...metadata, ...technicalMetadata });
                 succeeded += 1;
             } catch (error) {
                 console.error(`Không thể tải ${file.name}:`, error);

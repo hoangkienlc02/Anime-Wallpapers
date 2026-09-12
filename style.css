@@ -169,8 +169,25 @@ button { color: inherit; }
 .btn-primary { min-height: 48px; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 18px; border: 0; color: #fff; background: var(--accent); cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-size: 1rem; font-weight: 800; letter-spacing: .06em; transition: background .2s, transform .2s; }
 .btn-primary:hover { background: var(--accent-strong); transform: translateY(-2px); }
 .btn-primary:disabled { opacity: .6; cursor: wait; transform: none; }
-.lightbox { position: fixed; z-index: 500; inset: 0; display: none; align-items: center; justify-content: center; padding: 30px; background: rgba(2, 12, 13, .94); cursor: zoom-out; }
+.lightbox { position: fixed; z-index: 500; inset: 0; display: none; align-items: center; justify-content: center; padding: 30px; background: rgba(2, 12, 13, .94); cursor: default; }
 .lightbox img { max-width: min(100%, 1500px); max-height: 90vh; object-fit: contain; border: 1px solid var(--line-strong); box-shadow: 0 26px 90px #000; }
+.media-detail-dialog { position: relative; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(285px, .65fr); width: min(100%, 1260px); max-height: calc(100vh - 60px); overflow: auto; border: 1px solid var(--line-strong); background: var(--surface); box-shadow: 22px 26px 0 rgba(0, 0, 0, .22); }
+.detail-media { display: grid; place-items: center; min-height: 440px; padding: 22px; background: #020d0e; }
+.detail-media #lightbox-img { display: block; width: 100%; max-width: 100%; max-height: calc(100vh - 104px); border: 0; box-shadow: none; object-fit: contain; }
+.detail-panel { display: flex; flex-direction: column; padding: 42px 30px 28px; border-left: 1px solid var(--line); }
+.detail-panel h2 { margin: 9px 0 0; font-family: "Barlow Condensed", sans-serif; font-size: clamp(2.5rem, 4vw, 4rem); line-height: .85; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.detail-tags { margin: 20px 0 24px; color: var(--muted); font-size: .86rem; }
+.detail-stats { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid var(--line); }
+.detail-stats div { min-height: 79px; padding: 14px 8px 13px 0; border-bottom: 1px solid var(--line); }
+.detail-stats div:nth-child(odd) { border-right: 1px solid var(--line); padding-right: 14px; }
+.detail-stats div:nth-child(even) { padding-left: 14px; }
+.detail-stats div:last-child { grid-column: 1 / -1; border-right: 0; padding-left: 0; }
+.detail-stats dt { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .72rem; font-weight: 700; letter-spacing: .1em; }
+.detail-stats dd { margin: 7px 0 0; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 1.35rem; font-weight: 700; letter-spacing: .03em; }
+.detail-actions { display: grid; gap: 9px; margin-top: auto; padding-top: 28px; }
+.detail-actions .secondary-action, .detail-actions .btn-primary { width: 100%; text-decoration: none; }
+.detail-close { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 1px solid var(--line-strong); color: var(--text); background: rgba(4, 20, 21, .82); cursor: pointer; font-size: 1.6rem; line-height: 1; }
+.detail-close:hover { border-color: var(--accent); color: #fff; background: var(--accent); }
 .edit-box { width: min(100%, 520px); padding: 34px; cursor: default; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 18px 22px 0 rgba(0, 0, 0, .18); }
 .edit-box h3 { margin-bottom: 30px; }
 .edit-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 27px; }
@@ -216,4 +233,9 @@ button { color: inherit; }
     .upload-console { margin-top: 25px; padding: 21px; }
     .danger-action { margin-left: 0; }
     .site-footer { align-items: flex-start; flex-direction: column; padding: 23px 16px; }
+    .lightbox { align-items: start; padding: 16px; overflow-y: auto; }
+    .media-detail-dialog { grid-template-columns: 1fr; max-height: none; }
+    .detail-media { min-height: 250px; padding: 16px; }
+    .detail-media #lightbox-img { max-height: 60vh; }
+    .detail-panel { padding: 30px 20px 20px; border-top: 1px solid var(--line); border-left: 0; }
 }

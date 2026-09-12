@@ -6,6 +6,7 @@ let allImages = [];
 let filteredImages = [];
 let currentPage = 1;
 let sortMode = "featured";
+let activeDetailItem = null;
 const itemsPerPage = 20;
 
 function getOptimizedUrl(url) {
@@ -28,10 +29,12 @@ function applySort(items) {
         const viewsSecond = Number(second.views) || 0;
         const downloadsFirst = Number(first.downloads) || 0;
         const downloadsSecond = Number(second.downloads) || 0;
+        const likesFirst = Number(first.likes) || 0;
+        const likesSecond = Number(second.likes) || 0;
         if (sortMode === "views") return viewsSecond - viewsFirst || getCreatedTime(second) - getCreatedTime(first);
         if (sortMode === "downloads") return downloadsSecond - downloadsFirst || getCreatedTime(second) - getCreatedTime(first);
         if (sortMode === "featured") {
-            return (viewsSecond + downloadsSecond * 2) - (viewsFirst + downloadsFirst * 2)
+            return (viewsSecond + downloadsSecond * 2 + likesSecond * 3) - (viewsFirst + downloadsFirst * 2 + likesFirst * 3)
                 || getCreatedTime(second) - getCreatedTime(first);
         }
         return getCreatedTime(second) - getCreatedTime(first);
@@ -49,6 +52,91 @@ async function trackInteraction(item, field) {
         await updateDoc(doc(db, "photos", item.id), { [field]: increment(1) });
     } catch (error) {
         console.warn(`Không thể lưu lượt ${field}:`, error);
+    }
+}
+
+function formatBytes(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value <= 0) return "Chưa có dữ liệu";
+    const units = ["B", "KB", "MB", "GB"];
+    const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+    return `${(value / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function isLiked(item) {
+    return localStorage.getItem(`anime-wallpaper-liked:${item.id}`) === "true";
+}
+
+function refreshDetailPanel() {
+    const item = activeDetailItem;
+    if (!item) return;
+    document.getElementById("detailTitle").textContent = item.subName || item.theme || "WALLPAPER";
+    document.getElementById("detailTags").textContent = [item.device, item.theme].filter(Boolean).join(" · ") || "PRIVATE ARCHIVE";
+    document.getElementById("detailResolution").textContent = item.width && item.height ? `${item.width} × ${item.height}` : "Chưa có dữ liệu";
+    document.getElementById("detailSize").textContent = formatBytes(item.fileSizeBytes);
+    document.getElementById("detailViews").textContent = Number(item.views) || 0;
+    document.getElementById("detailDownloads").textContent = Number(item.downloads) || 0;
+    document.getElementById("detailLikes").textContent = Number(item.likes) || 0;
+    const liked = isLiked(item);
+    const likeButton = document.getElementById("detailLike");
+    likeButton.innerHTML = `<span class="material-icons-outlined">${liked ? "favorite" : "favorite_border"}</span> ${liked ? "ĐÃ THÍCH" : "THÍCH"}`;
+    document.getElementById("detailOpenOriginal").href = item.url;
+}
+
+async function hydrateDetailTechnicalMetadata(item) {
+    if (item.width && item.height && item.fileSizeBytes) return;
+    const updates = {};
+    if (!item.width || !item.height) {
+        const dimensions = await new Promise((resolve) => {
+            const image = new Image();
+            image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+            image.onerror = () => resolve({});
+            image.src = item.url;
+        });
+        Object.assign(updates, dimensions);
+    }
+    if (!item.fileSizeBytes) {
+        try {
+            const response = await fetch(item.url);
+            if (response.ok) updates.fileSizeBytes = (await response.blob()).size;
+        } catch {
+            // Older assets may not permit fetching their original file size from the browser.
+        }
+    }
+    if (!Object.keys(updates).length) return;
+    Object.assign(item, updates);
+    if (activeDetailItem?.id === item.id) refreshDetailPanel();
+    try {
+        await updateDoc(doc(db, "photos", item.id), updates);
+    } catch (error) {
+        console.warn("Không thể lưu thông tin kỹ thuật của ảnh cũ:", error);
+    }
+}
+
+window.openMediaDetails = (item) => {
+    activeDetailItem = item;
+    document.getElementById("lightbox-img").src = item.url;
+    refreshDetailPanel();
+    document.getElementById("lightbox").style.display = "flex";
+    hydrateDetailTechnicalMetadata(item);
+};
+
+window.closeMediaDetails = () => {
+    document.getElementById("lightbox").style.display = "none";
+    activeDetailItem = null;
+};
+
+async function toggleLike() {
+    const item = activeDetailItem;
+    if (!item) return;
+    const liked = isLiked(item);
+    item.likes = Math.max(0, (Number(item.likes) || 0) + (liked ? -1 : 1));
+    localStorage.setItem(`anime-wallpaper-liked:${item.id}`, String(!liked));
+    refreshDetailPanel();
+    try {
+        await updateDoc(doc(db, "photos", item.id), { likes: increment(liked ? -1 : 1) });
+    } catch (error) {
+        console.warn("Không thể lưu lượt thích:", error);
     }
 }
 
@@ -146,10 +234,7 @@ function renderGallery(data) {
         card.addEventListener("click", () => {
             trackInteraction(item, "views");
             if (video) window.open(item.url, "_blank", "noopener");
-            else {
-                document.getElementById("lightbox-img").src = item.url;
-                document.getElementById("lightbox").style.display = "flex";
-            }
+            else window.openMediaDetails(item);
         });
         gallery.appendChild(card);
     });
@@ -306,6 +391,7 @@ window.addEventListener("scroll", () => { backToTop.style.display = window.scrol
 backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
+    if (event.key === "Escape" && activeDetailItem) return window.closeMediaDetails();
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
     if (event.key === "ArrowLeft") goToPage(currentPage - 1);
 });
@@ -316,6 +402,17 @@ document.querySelectorAll("[data-router-link]").forEach((link) => {
         event.preventDefault();
         navigateTo(link.getAttribute("href"));
     });
+});
+document.getElementById("detailClose").addEventListener("click", window.closeMediaDetails);
+document.getElementById("detailDownload").addEventListener("click", () => {
+    if (!activeDetailItem) return;
+    trackInteraction(activeDetailItem, "downloads");
+    window.downloadImage(activeDetailItem.url, `${activeDetailItem.subName || activeDetailItem.theme || "anime"}.jpg`);
+    refreshDetailPanel();
+});
+document.getElementById("detailLike").addEventListener("click", toggleLike);
+document.getElementById("detailOpenOriginal").addEventListener("click", () => {
+    if (activeDetailItem) trackInteraction(activeDetailItem, "views");
 });
 window.addEventListener("popstate", renderRoute);
 
