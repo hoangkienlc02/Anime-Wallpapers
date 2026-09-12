@@ -1,10 +1,11 @@
-import { collection, getDocs, orderBy, query } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDocs, increment, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db } from "./firebase-config.js";
 import { protectPage } from "./auth-gate.js";
 
 let allImages = [];
 let filteredImages = [];
 let currentPage = 1;
+let sortMode = "featured";
 const itemsPerPage = 20;
 
 function getOptimizedUrl(url) {
@@ -14,6 +15,41 @@ function getOptimizedUrl(url) {
 
 function isVideo(item) {
     return item.type === "video" || /\.(mp4|mov)(\?|$)/i.test(item.url || "");
+}
+
+function getCreatedTime(item) {
+    if (typeof item.createdAt?.toMillis === "function") return item.createdAt.toMillis();
+    return new Date(item.createdAt || 0).getTime() || 0;
+}
+
+function applySort(items) {
+    return [...items].sort((first, second) => {
+        const viewsFirst = Number(first.views) || 0;
+        const viewsSecond = Number(second.views) || 0;
+        const downloadsFirst = Number(first.downloads) || 0;
+        const downloadsSecond = Number(second.downloads) || 0;
+        if (sortMode === "views") return viewsSecond - viewsFirst || getCreatedTime(second) - getCreatedTime(first);
+        if (sortMode === "downloads") return downloadsSecond - downloadsFirst || getCreatedTime(second) - getCreatedTime(first);
+        if (sortMode === "featured") {
+            return (viewsSecond + downloadsSecond * 2) - (viewsFirst + downloadsFirst * 2)
+                || getCreatedTime(second) - getCreatedTime(first);
+        }
+        return getCreatedTime(second) - getCreatedTime(first);
+    });
+}
+
+function updateResultCount() {
+    const resultCount = document.getElementById("galleryResultCount");
+    if (resultCount) resultCount.textContent = `${filteredImages.length} KẾT QUẢ`;
+}
+
+async function trackInteraction(item, field) {
+    item[field] = (Number(item[field]) || 0) + 1;
+    try {
+        await updateDoc(doc(db, "photos", item.id), { [field]: increment(1) });
+    } catch (error) {
+        console.warn(`Không thể lưu lượt ${field}:`, error);
+    }
 }
 
 window.downloadImage = async (url, filename) => {
@@ -102,11 +138,13 @@ function renderGallery(data) {
         const actions = document.createElement("div");
         actions.className = "actions";
         actions.appendChild(makeAction("file_download", "Tải xuống", () => {
+            trackInteraction(item, "downloads");
             window.downloadImage(item.url, `${item.subName || item.theme || "anime"}${video ? ".mp4" : ".jpg"}`);
         }));
         overlay.append(info, actions);
         card.appendChild(overlay);
         card.addEventListener("click", () => {
+            trackInteraction(item, "views");
             if (video) window.open(item.url, "_blank", "noopener");
             else {
                 document.getElementById("lightbox-img").src = item.url;
@@ -151,19 +189,28 @@ window.filterByDynamicTag = (tag, button) => {
     filteredImages = term === "all" ? [...allImages] : allImages.filter((item) =>
         item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
     );
+    filteredImages = applySort(filteredImages);
     goToPage(1);
 };
 
 window.filterByType = (type, button) => {
     document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
     button?.classList.add("active");
-    filteredImages = allImages.filter((item) => isVideo(item) === (type === "video"));
+    filteredImages = applySort(allImages.filter((item) => isVideo(item) === (type === "video")));
     goToPage(1);
 };
 
 window.filterImages = () => {
     const term = document.getElementById("searchInput").value.trim().toLowerCase();
-    filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term)));
+    filteredImages = applySort(allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term))));
+    goToPage(1);
+};
+
+window.sortGallery = (mode, button) => {
+    sortMode = mode;
+    document.querySelectorAll(".sort-tab").forEach((tab) => tab.classList.remove("active"));
+    button?.classList.add("active");
+    filteredImages = applySort(filteredImages);
     goToPage(1);
 };
 
@@ -171,6 +218,7 @@ window.goToPage = function goToPage(page) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1 || (totalPages > 0 && page > totalPages)) return;
     currentPage = page;
+    updateResultCount();
     renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -210,7 +258,7 @@ async function loadImages() {
     try {
         const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-        filteredImages = [...allImages];
+        filteredImages = applySort(allImages);
         renderFilterTags();
         goToPage(1);
     } catch (error) {

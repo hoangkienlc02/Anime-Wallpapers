@@ -75,6 +75,10 @@ button { color: inherit; }
 .hero h1 { position: relative; z-index: 1; font-size: clamp(5.2rem, 11vw, 11.5rem); margin: 12px 0 0; }
 .hero h1 span { color: transparent; -webkit-text-stroke: 1px var(--accent); }
 .hero-description { max-width: 500px; margin: 22px 0 0; color: var(--muted); line-height: 1.65; }
+.archive-hero { min-height: 355px; padding-top: 44px; }
+.archive-hero .hero-copy .kicker { margin-left: 3px; }
+.archive-hero h1 { font-size: clamp(6rem, 13vw, 13rem); line-height: .7; }
+.archive-hero h1 span { -webkit-text-stroke: 1.5px var(--accent); }
 .hero-stat { position: relative; z-index: 1; min-width: 190px; padding: 17px 0; border-top: 1px solid var(--accent); text-align: right; }
 .hero-stat strong { display: block; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 2rem; letter-spacing: .07em; }
 .hero-stat span, .section-index { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .9rem; letter-spacing: .11em; }
@@ -100,6 +104,13 @@ button { color: inherit; }
 .gallery-section { padding: 35px 0 84px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding-bottom: 23px; border-bottom: 1px solid var(--line); }
 .section-heading h2, .console-title h2, .edit-box h3 { margin: 7px 0 0; font-family: "Barlow Condensed", sans-serif; font-size: clamp(2rem, 4vw, 3.4rem); line-height: .9; letter-spacing: -.025em; }
+.gallery-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 28px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.result-count { margin: 8px 0 0; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 1.15rem; font-weight: 700; letter-spacing: .06em; }
+.sort-tabs { display: flex; align-items: center; align-self: stretch; gap: clamp(14px, 2.6vw, 36px); }
+.sort-tab { position: relative; padding: 0 0 18px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-size: .95rem; font-weight: 700; letter-spacing: .07em; transition: color .2s; }
+.sort-tab::after { content: ""; position: absolute; right: 0; bottom: -19px; left: 0; height: 2px; background: var(--accent); opacity: 0; transform: scaleX(.45); transition: .2s; }
+.sort-tab:hover, .sort-tab.active { color: var(--text); }
+.sort-tab.active::after { opacity: 1; transform: scaleX(1); }
 .gallery-grid { columns: 3 280px; column-gap: 18px; padding-top: 28px; }
 .card { position: relative; break-inside: avoid; overflow: hidden; margin-bottom: 18px; background: var(--surface); border: 1px solid var(--line); cursor: pointer; }
 .card::before { content: ""; display: block; position: absolute; inset: 0; z-index: 1; border: 1px solid transparent; transition: border-color .25s; pointer-events: none; }
@@ -164,6 +175,7 @@ button { color: inherit; }
     .site-nav { display: none; }
     .account-label { display: none; }
     .hero { min-height: 270px; }
+    .archive-hero { min-height: 310px; }
     .upload-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
@@ -175,6 +187,7 @@ button { color: inherit; }
     .page-shell { width: min(100% - 32px, 1840px); }
     .hero { min-height: 310px; padding: 52px 0 28px; }
     .hero h1 { font-size: clamp(4.8rem, 24vw, 7rem); }
+    .archive-hero h1 { font-size: clamp(5.2rem, 26vw, 7.5rem); }
     .hero-stat { display: none; }
     .hero-description { max-width: 340px; font-size: .9rem; }
     .search-nav-row { align-items: stretch; flex-direction: column; }
@@ -184,6 +197,9 @@ button { color: inherit; }
     .filter-caption { width: 100%; }
     .gallery-grid { columns: 1; }
     .section-heading { align-items: start; }
+    .gallery-toolbar { align-items: start; flex-direction: column; gap: 20px; }
+    .sort-tabs { width: 100%; justify-content: space-between; gap: 8px; }
+    .sort-tab { font-size: .78rem; }
     .section-index { padding-top: 7px; font-size: .75rem; }
     .upload-console { margin-top: 25px; padding: 21px; }
     .danger-action { margin-left: 0; }
