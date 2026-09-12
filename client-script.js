@@ -70,8 +70,8 @@ function isLiked(item) {
 function refreshDetailPanel() {
     const item = activeDetailItem;
     if (!item) return;
-    document.getElementById("detailTitle").textContent = item.subName || item.theme || "WALLPAPER";
-    document.getElementById("detailTags").textContent = [item.device, item.theme].filter(Boolean).join(" · ") || "PRIVATE ARCHIVE";
+    document.getElementById("detailTitle").textContent = item.subName || item.seriesName || item.theme || "WALLPAPER";
+    document.getElementById("detailTags").textContent = [item.device, item.theme, item.seriesName && `GAME / ANIME: ${item.seriesName}`, item.artistName && `ARTIST: ${item.artistName}`].filter(Boolean).join(" · ") || "PRIVATE ARCHIVE";
     document.getElementById("detailResolution").textContent = item.width && item.height ? `${item.width} × ${item.height}` : "Chưa có dữ liệu";
     document.getElementById("detailSize").textContent = formatBytes(item.fileSizeBytes);
     document.getElementById("detailViews").textContent = Number(item.views) || 0;
@@ -223,6 +223,7 @@ function renderGallery(data) {
         info.className = "card-info";
         info.append(makeTag(video ? "VIDEO" : item.device || "IMAGE"), makeTag(`#${item.theme || "Khác"}`));
         if (item.subName) info.appendChild(makeTag(item.subName));
+        if (item.seriesName) info.appendChild(makeTag(item.seriesName));
         const actions = document.createElement("div");
         actions.className = "actions";
         actions.appendChild(makeAction("file_download", "Tải xuống", () => {
@@ -271,7 +272,7 @@ function renderFilterTags() {
 
 function filterByTerm(term) {
     return term === "all" ? [...allImages] : allImages.filter((item) =>
-        item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
+        [item.subName, item.device, item.theme, item.seriesName, item.artistName].some((value) => value?.toLowerCase().includes(term))
     );
 }
 
@@ -299,7 +300,7 @@ function renderRoute() {
 
     if (queryText) {
         activeTag = "";
-        data = data.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(queryText)));
+        data = data.filter((item) => [item.device, item.theme, item.subName, item.seriesName, item.artistName].some((value) => value?.toLowerCase().includes(queryText)));
     }
 
     searchInput.value = queryText;

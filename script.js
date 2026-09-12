@@ -139,7 +139,9 @@ function readFileMetadata(index) {
     return {
         device: card.querySelector('[data-field="device"]').value.trim(),
         theme: card.querySelector('[data-field="theme"]').value.trim(),
-        subName: card.querySelector('[data-field="subName"]').value.trim()
+        subName: card.querySelector('[data-field="subName"]').value.trim(),
+        seriesName: card.querySelector('[data-field="seriesName"]').value.trim(),
+        artistName: card.querySelector('[data-field="artistName"]').value.trim()
     };
 }
 
@@ -259,6 +261,8 @@ function renderGallery(data) {
         info.className = "card-info";
         info.append(makeTag(video ? "VIDEO" : item.device || "IMAGE"), makeTag(`#${item.theme || "Khác"}`));
         if (item.subName) info.appendChild(makeTag(item.subName));
+        if (item.seriesName) info.appendChild(makeTag(item.seriesName));
+        if (item.artistName) info.appendChild(makeTag(item.artistName));
         const actions = document.createElement("div");
         actions.className = "actions";
         actions.append(
@@ -284,6 +288,8 @@ window.editPhoto = (item) => {
     document.getElementById("editDeviceInput").value = item.device || "";
     document.getElementById("editThemeInput").value = item.theme || "";
     document.getElementById("editNameInput").value = item.subName || "";
+    document.getElementById("editSeriesInput").value = item.seriesName || "";
+    document.getElementById("editArtistInput").value = item.artistName || "";
     document.getElementById("editModal").style.display = "flex";
 };
 window.closeEditModal = () => { document.getElementById("editModal").style.display = "none"; };
@@ -292,7 +298,9 @@ window.saveEdit = async () => {
     const newData = {
         device: document.getElementById("editDeviceInput").value.trim(),
         theme: document.getElementById("editThemeInput").value.trim(),
-        subName: document.getElementById("editNameInput").value.trim()
+        subName: document.getElementById("editNameInput").value.trim(),
+        seriesName: document.getElementById("editSeriesInput").value.trim(),
+        artistName: document.getElementById("editArtistInput").value.trim()
     };
     if (!newData.device || !newData.theme) return showToast("Thiết bị và chủ đề không được để trống.", "error");
     try {
@@ -384,7 +392,7 @@ window.filterByType = (type, button) => {
 };
 window.filterImages = () => {
     const term = document.getElementById("searchInput").value.trim().toLowerCase();
-    filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term)));
+    filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName, item.seriesName, item.artistName].some((value) => value?.toLowerCase().includes(term)));
     goToPage(1, { scroll: false });
 };
 
@@ -453,7 +461,7 @@ function addMetadataInput(card, labelText, field, placeholder, value = "", requi
 }
 
 function captureMetadataDrafts() {
-    return selectedFiles.map((_, index) => readFileMetadata(index) || { device: "", theme: "", subName: "" });
+    return selectedFiles.map((_, index) => readFileMetadata(index) || { device: "", theme: "", subName: "", seriesName: "", artistName: "" });
 }
 
 function syncFileInput() {
@@ -524,6 +532,8 @@ function renderFileMetadataFields(files) {
         addMetadataInput(card, "THIẾT BỊ", "device", "Mobile hoặc PC", draft.device, true);
         addMetadataInput(card, "CHỦ ĐỀ", "theme", "Anime, Game...", draft.theme, true);
         addMetadataInput(card, "NHÂN VẬT / TÊN", "subName", "Ví dụ: Luffy, Jinx", draft.subName);
+        addMetadataInput(card, "TÊN GAME / ANIME", "seriesName", "Ví dụ: Genshin Impact", draft.seriesName);
+        addMetadataInput(card, "TÊN ARTIST", "artistName", "Ví dụ: Hiten", draft.artistName);
         list.appendChild(card);
     });
 }
