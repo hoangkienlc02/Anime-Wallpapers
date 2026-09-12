@@ -160,6 +160,7 @@ function renderFilterTags() {
     container.replaceChildren();
     const allButton = document.createElement("button");
     allButton.className = "tag-btn active";
+    allButton.dataset.tag = "all";
     allButton.textContent = `Tất cả (${allImages.length})`;
     allButton.addEventListener("click", () => window.filterByDynamicTag("all", allButton));
     container.appendChild(allButton);
@@ -172,6 +173,7 @@ function renderFilterTags() {
     [...counts.keys()].sort().forEach((name) => {
         const button = document.createElement("button");
         button.className = "tag-btn";
+        button.dataset.tag = name.toLowerCase();
         button.append(document.createTextNode(`${name} `));
         const count = document.createElement("span");
         count.className = "tag-count";
@@ -182,28 +184,61 @@ function renderFilterTags() {
     });
 }
 
-window.filterByDynamicTag = (tag, button) => {
-    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
-    button?.classList.add("active");
-    const term = tag.toLowerCase();
-    filteredImages = term === "all" ? [...allImages] : allImages.filter((item) =>
+function filterByTerm(term) {
+    return term === "all" ? [...allImages] : allImages.filter((item) =>
         item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
     );
-    filteredImages = applySort(filteredImages);
+}
+
+function syncRouteControls(path, tag = "") {
+    document.querySelectorAll(".nav-link, .tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
+    document.querySelector(`[data-router-link][href="${path}"]`)?.classList.add("active");
+    if (tag) document.querySelectorAll(`[data-tag="${CSS.escape(tag)}"]`).forEach((element) => element.classList.add("active"));
+}
+
+function renderRoute() {
+    const path = decodeURIComponent(location.pathname.replace(/\/+$/, "")) || "/";
+    const queryText = new URLSearchParams(location.search).get("q")?.trim().toLowerCase() || "";
+    const searchInput = document.getElementById("searchInput");
+    let data = [...allImages];
+    let activeTag = "";
+
+    if (path === "/images") data = data.filter((item) => !isVideo(item));
+    else if (path === "/videos") data = data.filter((item) => isVideo(item));
+    else if (path.startsWith("/tag/")) {
+        activeTag = path.slice("/tag/".length).toLowerCase();
+        data = filterByTerm(activeTag);
+    } else if (path !== "/" && path !== "/wallpapers" && path !== "/search") {
+        history.replaceState({}, "", "/wallpapers");
+    }
+
+    if (queryText) {
+        activeTag = "";
+        data = data.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(queryText)));
+    }
+
+    searchInput.value = queryText;
+    filteredImages = applySort(data);
+    syncRouteControls(path, activeTag || (path === "/" || path === "/wallpapers" ? "all" : ""));
     goToPage(1);
+}
+
+function navigateTo(path, { replace = false } = {}) {
+    if (replace) history.replaceState({}, "", path);
+    else history.pushState({}, "", path);
+    renderRoute();
+}
+
+window.filterByDynamicTag = (tag) => {
+    const route = tag.toLowerCase() === "all" ? "/wallpapers" : `/tag/${encodeURIComponent(tag.toLowerCase())}`;
+    navigateTo(route);
 };
 
-window.filterByType = (type, button) => {
-    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
-    button?.classList.add("active");
-    filteredImages = applySort(allImages.filter((item) => isVideo(item) === (type === "video")));
-    goToPage(1);
-};
+window.filterByType = (type) => navigateTo(type === "video" ? "/videos" : "/images");
 
 window.filterImages = () => {
-    const term = document.getElementById("searchInput").value.trim().toLowerCase();
-    filteredImages = applySort(allImages.filter((item) => [item.device, item.theme, item.subName].some((value) => value?.toLowerCase().includes(term))));
-    goToPage(1);
+    const term = document.getElementById("searchInput").value.trim();
+    navigateTo(term ? `/search?q=${encodeURIComponent(term)}` : "/wallpapers", { replace: true });
 };
 
 window.sortGallery = (mode, button) => {
@@ -258,9 +293,8 @@ async function loadImages() {
     try {
         const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-        filteredImages = applySort(allImages);
         renderFilterTags();
-        goToPage(1);
+        renderRoute();
     } catch (error) {
         console.error(error);
         gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra quyền truy cập Firebase.";
@@ -275,5 +309,14 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
     if (event.key === "ArrowLeft") goToPage(currentPage - 1);
 });
+
+document.querySelectorAll("[data-router-link]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        navigateTo(link.getAttribute("href"));
+    });
+});
+window.addEventListener("popstate", renderRoute);
 
 protectPage(loadImages);
