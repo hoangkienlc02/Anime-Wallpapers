@@ -8,6 +8,7 @@ let currentPage = 1;
 let selectedFiles = [];
 let metadataDrafts = [];
 let selectedPreviewIndex = 0;
+let activeDetailItem = null;
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -28,6 +29,42 @@ function getOptimizedUrl(url) {
 function isVideo(item) {
     return item.type === "video" || /\.(mp4|mov)(\?|$)/i.test(item.url || "");
 }
+
+function formatBytes(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value <= 0) return "Chưa có dữ liệu";
+    const units = ["B", "KB", "MB", "GB"];
+    const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+    return `${(value / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function refreshDetailPanel() {
+    const item = activeDetailItem;
+    if (!item) return;
+    document.getElementById("detailTitle").textContent = item.subName || item.seriesName || item.theme || "WALLPAPER";
+    document.getElementById("detailTags").textContent = [item.device, item.theme].filter(Boolean).join(" · ") || "PRIVATE ARCHIVE";
+    document.getElementById("detailCharacter").textContent = item.subName || "Chưa có dữ liệu";
+    document.getElementById("detailSeries").textContent = item.seriesName || "Chưa có dữ liệu";
+    document.getElementById("detailArtist").textContent = item.artistName || "Chưa có dữ liệu";
+    document.getElementById("detailResolution").textContent = item.width && item.height ? `${item.width} × ${item.height}` : "Chưa có dữ liệu";
+    document.getElementById("detailSize").textContent = formatBytes(item.fileSizeBytes);
+    document.getElementById("detailViews").textContent = Number(item.views) || 0;
+    document.getElementById("detailDownloads").textContent = Number(item.downloads) || 0;
+    document.getElementById("detailLikes").textContent = Number(item.likes) || 0;
+    document.getElementById("detailOpenOriginal").href = item.url;
+}
+
+window.openMediaDetails = (item) => {
+    activeDetailItem = item;
+    document.getElementById("lightbox-img").src = item.url;
+    refreshDetailPanel();
+    document.getElementById("lightbox").style.display = "flex";
+};
+
+window.closeMediaDetails = () => {
+    document.getElementById("lightbox").style.display = "none";
+    activeDetailItem = null;
+};
 
 async function secureApi(path, payload) {
     const token = await getIdToken();
@@ -274,10 +311,7 @@ function renderGallery(data) {
         card.appendChild(overlay);
         card.addEventListener("click", () => {
             if (video) window.open(item.url, "_blank", "noopener");
-            else {
-                document.getElementById("lightbox-img").src = item.url;
-                document.getElementById("lightbox").style.display = "flex";
-            }
+            else window.openMediaDetails(item);
         });
         gallery.appendChild(card);
     });
@@ -640,6 +674,17 @@ window.exportMetadata = () => {
 const backToTop = document.getElementById("backToTop");
 window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });
 backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+document.getElementById("detailClose").addEventListener("click", window.closeMediaDetails);
+document.getElementById("detailDownload").addEventListener("click", () => {
+    if (!activeDetailItem) return;
+    window.downloadImage(activeDetailItem.url, `${activeDetailItem.subName || activeDetailItem.seriesName || activeDetailItem.theme || "anime"}${isVideo(activeDetailItem) ? ".mp4" : ".jpg"}`);
+});
+document.getElementById("detailEdit").addEventListener("click", () => {
+    if (!activeDetailItem) return;
+    const item = activeDetailItem;
+    window.closeMediaDetails();
+    window.editPhoto(item);
+});
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "ArrowRight") goToPage(currentPage + 1);

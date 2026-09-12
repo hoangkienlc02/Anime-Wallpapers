@@ -71,7 +71,10 @@ function refreshDetailPanel() {
     const item = activeDetailItem;
     if (!item) return;
     document.getElementById("detailTitle").textContent = item.subName || item.seriesName || item.theme || "WALLPAPER";
-    document.getElementById("detailTags").textContent = [item.device, item.theme, item.seriesName && `GAME / ANIME: ${item.seriesName}`, item.artistName && `ARTIST: ${item.artistName}`].filter(Boolean).join(" · ") || "PRIVATE ARCHIVE";
+    document.getElementById("detailTags").textContent = [item.device, item.theme].filter(Boolean).join(" · ") || "PRIVATE ARCHIVE";
+    document.getElementById("detailCharacter").textContent = item.subName || "Chưa có dữ liệu";
+    document.getElementById("detailSeries").textContent = item.seriesName || "Chưa có dữ liệu";
+    document.getElementById("detailArtist").textContent = item.artistName || "Chưa có dữ liệu";
     document.getElementById("detailResolution").textContent = item.width && item.height ? `${item.width} × ${item.height}` : "Chưa có dữ liệu";
     document.getElementById("detailSize").textContent = formatBytes(item.fileSizeBytes);
     document.getElementById("detailViews").textContent = Number(item.views) || 0;
