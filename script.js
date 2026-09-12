@@ -112,33 +112,48 @@ async function uploadOneFile(file, metadata) {
     }
 }
 
+function readFileMetadata(index) {
+    const card = document.querySelector(`.file-metadata-card[data-file-index="${index}"]`);
+    if (!card) return null;
+    return {
+        device: card.querySelector('[data-field="device"]').value.trim(),
+        theme: card.querySelector('[data-field="theme"]').value.trim(),
+        subName: card.querySelector('[data-field="subName"]').value.trim()
+    };
+}
+
 window.handleUpload = async () => {
-    const fileInput = document.getElementById("imageInput");
-    const device = document.getElementById("deviceInput").value.trim();
-    const theme = document.getElementById("themeInput").value.trim();
-    const subName = document.getElementById("nameInput").value.trim();
-    const files = [...fileInput.files];
-    if (!files.length || !device || !theme) {
-        showToast("Hãy chọn tệp, nhập thiết bị và chủ đề.", "error");
+    const files = [...document.getElementById("imageInput").files];
+    if (!files.length) {
+        showToast("Hãy chọn ít nhất một tệp.", "error");
         return;
     }
 
     const maxSize = 100 * 1024 * 1024;
-    const validFiles = files.filter((file) => {
-        const valid = /^(image|video)\//.test(file.type) && file.size <= maxSize;
-        if (!valid) showToast(`Bỏ qua ${file.name}: chỉ nhận ảnh/video tối đa 100 MB.`, "error");
-        return valid;
-    });
-    if (!validFiles.length) return;
+    const uploadQueue = [];
+    for (const [index, file] of files.entries()) {
+        const validFile = /^(image|video)\//.test(file.type) && file.size <= maxSize;
+        if (!validFile) {
+            showToast(`Bỏ qua ${file.name}: chỉ nhận ảnh/video tối đa 100 MB.`, "error");
+            continue;
+        }
+        const metadata = readFileMetadata(index);
+        if (!metadata?.device || !metadata.theme) {
+            showToast(`Hãy nhập Thiết bị và Chủ đề cho tệp ${index + 1}: ${file.name}`, "error");
+            return;
+        }
+        uploadQueue.push({ file, metadata });
+    }
+    if (!uploadQueue.length) return;
 
     const uploadButton = document.getElementById("uploadButton");
     uploadButton.disabled = true;
-    const metadata = { device, theme, subName };
     let succeeded = 0;
     const failures = [];
     try {
-        for (const [index, file] of validFiles.entries()) {
-            uploadButton.innerHTML = `<span class="material-icons-outlined">cloud_upload</span> ĐANG TẢI ${index + 1}/${validFiles.length}`;
+        for (const [index, item] of uploadQueue.entries()) {
+            const { file, metadata } = item;
+            uploadButton.innerHTML = `<span class="material-icons-outlined">cloud_upload</span> ĐANG TẢI ${index + 1}/${uploadQueue.length}`;
             try {
                 await uploadOneFile(file, metadata);
                 succeeded += 1;
@@ -154,7 +169,7 @@ window.handleUpload = async () => {
         }
         if (failed) {
             const firstFailure = failures[0];
-            showToast(`${failed}/${validFiles.length} tệp không tải được. ${firstFailure.message}`, "error");
+            showToast(`${failed}/${uploadQueue.length} tệp không tải được. ${firstFailure.message}`, "error");
         }
         await loadImages();
     } catch (error) {
@@ -402,15 +417,55 @@ async function loadImages() {
     }
 }
 
+function addMetadataInput(card, labelText, field, placeholder, required = false) {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = placeholder;
+    input.dataset.field = field;
+    input.required = required;
+    label.appendChild(input);
+    card.appendChild(label);
+}
+
+function renderFileMetadataFields(files) {
+    const list = document.getElementById("fileMetadataList");
+    list.replaceChildren();
+    if (!files.length) {
+        const empty = document.createElement("p");
+        empty.className = "metadata-empty";
+        empty.textContent = "Chọn tệp để nhập thông tin riêng cho từng ảnh hoặc video.";
+        list.appendChild(empty);
+        return;
+    }
+
+    files.forEach((file, index) => {
+        const card = document.createElement("article");
+        card.className = "file-metadata-card form-group";
+        card.dataset.fileIndex = index;
+        const heading = document.createElement("div");
+        heading.className = "file-metadata-heading";
+        const order = document.createElement("span");
+        order.textContent = `TỆP ${index + 1}`;
+        const name = document.createElement("strong");
+        name.textContent = file.name;
+        heading.append(order, name);
+        card.appendChild(heading);
+        addMetadataInput(card, "THIẾT BỊ", "device", "Mobile hoặc PC", true);
+        addMetadataInput(card, "CHỦ ĐỀ", "theme", "Anime, Game...", true);
+        addMetadataInput(card, "NHÂN VẬT / TÊN", "subName", "Ví dụ: Luffy, Jinx");
+        list.appendChild(card);
+    });
+}
+
 function resetUploadForm() {
     const preview = document.getElementById("preview");
     const videoPreview = document.getElementById("videoPreview");
     if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
     if (videoPreview.dataset.objectUrl) URL.revokeObjectURL(videoPreview.dataset.objectUrl);
     document.getElementById("imageInput").value = "";
-    document.getElementById("deviceInput").value = "";
-    document.getElementById("themeInput").value = "";
-    document.getElementById("nameInput").value = "";
+    renderFileMetadataFields([]);
     document.getElementById("selectedFilesInfo").textContent = "";
     preview.removeAttribute("src");
     preview.removeAttribute("data-object-url");
@@ -424,7 +479,10 @@ function resetUploadForm() {
 document.getElementById("imageInput").addEventListener("change", (event) => {
     const files = [...event.target.files];
     const file = files[0];
-    if (!file) return;
+    if (!file) {
+        renderFileMetadataFields([]);
+        return;
+    }
     const preview = document.getElementById("preview");
     const videoPreview = document.getElementById("videoPreview");
     if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
@@ -446,6 +504,7 @@ document.getElementById("imageInput").addEventListener("change", (event) => {
     const totalSize = files.reduce((sum, selectedFile) => sum + selectedFile.size, 0);
     const sizeInMb = (totalSize / 1024 / 1024).toFixed(totalSize >= 10 * 1024 * 1024 ? 0 : 1);
     document.getElementById("selectedFilesInfo").textContent = `${files.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp đầu tiên`;
+    renderFileMetadataFields(files);
     document.getElementById("dropText").style.display = "none";
 });
 
