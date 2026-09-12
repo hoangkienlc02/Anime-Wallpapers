@@ -75,10 +75,10 @@ button { color: inherit; }
 .hero h1 { position: relative; z-index: 1; font-size: clamp(5.2rem, 11vw, 11.5rem); margin: 12px 0 0; }
 .hero h1 span { color: transparent; -webkit-text-stroke: 1px var(--accent); }
 .hero-description { max-width: 500px; margin: 22px 0 0; color: var(--muted); line-height: 1.65; }
-.archive-hero { min-height: 355px; padding-top: 44px; }
-.archive-hero .hero-copy .kicker { margin-left: 3px; }
-.archive-hero h1 { font-size: clamp(6rem, 13vw, 13rem); line-height: .7; }
-.archive-hero h1 span { -webkit-text-stroke: 1.5px var(--accent); }
+.archive-hero { min-height: 330px; padding-top: 44px; }
+.archive-hero .hero-copy .kicker { margin: 24px 0 0 3px; }
+.archive-hero h1 { margin: 0; font-size: clamp(4.6rem, 8vw, 8rem); line-height: .74; }
+.archive-hero h1 span { -webkit-text-stroke: 1.25px var(--accent); }
 .hero-stat { position: relative; z-index: 1; min-width: 190px; padding: 17px 0; border-top: 1px solid var(--accent); text-align: right; }
 .hero-stat strong { display: block; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 2rem; letter-spacing: .07em; }
 .hero-stat span, .section-index { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .9rem; letter-spacing: .11em; }
@@ -175,7 +175,7 @@ button { color: inherit; }
     .site-nav { display: none; }
     .account-label { display: none; }
     .hero { min-height: 270px; }
-    .archive-hero { min-height: 310px; }
+    .archive-hero { min-height: 290px; }
     .upload-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
@@ -187,7 +187,7 @@ button { color: inherit; }
     .page-shell { width: min(100% - 32px, 1840px); }
     .hero { min-height: 310px; padding: 52px 0 28px; }
     .hero h1 { font-size: clamp(4.8rem, 24vw, 7rem); }
-    .archive-hero h1 { font-size: clamp(5.2rem, 26vw, 7.5rem); }
+    .archive-hero h1 { font-size: clamp(4.1rem, 20vw, 6.2rem); }
     .hero-stat { display: none; }
     .hero-description { max-width: 340px; font-size: .9rem; }
     .search-nav-row { align-items: stretch; flex-direction: column; }

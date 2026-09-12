@@ -220,7 +220,7 @@ function renderRoute() {
     searchInput.value = queryText;
     filteredImages = applySort(data);
     syncRouteControls(path, activeTag || (path === "/" || path === "/wallpapers" ? "all" : ""));
-    goToPage(1);
+    goToPage(1, { scroll: false });
 }
 
 function navigateTo(path, { replace = false } = {}) {
@@ -246,17 +246,17 @@ window.sortGallery = (mode, button) => {
     document.querySelectorAll(".sort-tab").forEach((tab) => tab.classList.remove("active"));
     button?.classList.add("active");
     filteredImages = applySort(filteredImages);
-    goToPage(1);
+    goToPage(1, { scroll: false });
 };
 
-window.goToPage = function goToPage(page) {
+window.goToPage = function goToPage(page, { scroll = true } = {}) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1 || (totalPages > 0 && page > totalPages)) return;
     currentPage = page;
     updateResultCount();
     renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 function renderPagination() {
