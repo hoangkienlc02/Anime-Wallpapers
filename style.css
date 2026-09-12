@@ -152,11 +152,13 @@ button { color: inherit; }
 .metadata-empty { align-self: center; margin: auto 0; color: var(--muted); line-height: 1.55; }
 .file-metadata-card { gap: 8px; padding: 14px 16px 16px; border: 1px solid var(--line); background: rgba(0, 0, 0, .08); }
 .file-metadata-heading { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.file-metadata-preview { flex: none; width: 52px; height: 52px; border: 1px solid var(--line-strong); object-fit: cover; background: var(--bg-deep); }
-.file-metadata-title { display: grid; min-width: 0; gap: 4px; }
+.file-metadata-thumbnail { display: grid; flex: none; place-items: center; width: 58px; height: 58px; padding: 3px; border: 1px solid var(--line-strong); background: var(--bg-deep); cursor: pointer; transition: .2s; }
+.file-metadata-thumbnail:hover, .file-metadata-thumbnail.active { border-color: var(--accent); box-shadow: 3px 3px 0 var(--accent-soft); }
+.file-metadata-preview { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--bg-deep); }
+.file-metadata-title { display: grid; flex: 1; min-width: 0; gap: 4px; }
 .file-metadata-heading span { flex: none; color: var(--accent); font-family: "Barlow Condensed", sans-serif; font-size: .78rem; font-weight: 800; letter-spacing: .1em; }
 .file-metadata-heading strong { overflow: hidden; color: var(--text); font-size: .78rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.remove-selected-file { display: grid; flex: none; place-items: center; width: 32px; height: 32px; margin-left: auto; border: 1px solid var(--line-strong); color: var(--muted); background: transparent; cursor: pointer; transition: .2s; }
+.remove-selected-file { display: grid; flex: none; place-items: center; width: 32px; height: 32px; margin-left: auto; padding: 0; border: 1px solid var(--line-strong); color: var(--muted); background: transparent; cursor: pointer; font-family: Inter, sans-serif; font-size: 1.4rem; line-height: 1; transition: .2s; }
 .remove-selected-file:hover { border-color: var(--accent); color: #fff; background: var(--accent); }
 .danger-zone { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
 .secondary-action, .danger-action { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border: 1px solid var(--line-strong); background: transparent; color: var(--text); cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-size: .9rem; letter-spacing: .05em; font-weight: 700; }

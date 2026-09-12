@@ -7,6 +7,7 @@ let filteredImages = [];
 let currentPage = 1;
 let selectedFiles = [];
 let metadataDrafts = [];
+let selectedPreviewIndex = 0;
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -442,7 +443,14 @@ function syncFileInput() {
     document.getElementById("imageInput").files = transfer.files;
 }
 
-function createFilePreview(file) {
+function createFilePreview(file, index) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "file-metadata-thumbnail";
+    button.dataset.fileIndex = index;
+    button.title = `Xem trước ${file.name}`;
+    button.setAttribute("aria-label", button.title);
+    button.classList.toggle("active", index === selectedPreviewIndex);
     const media = document.createElement(file.type.startsWith("video/") ? "video" : "img");
     media.className = "file-metadata-preview";
     media.alt = file.name;
@@ -454,7 +462,9 @@ function createFilePreview(file) {
     const releaseUrl = () => URL.revokeObjectURL(objectUrl);
     media.addEventListener(file.type.startsWith("video/") ? "loadeddata" : "load", releaseUrl, { once: true });
     media.addEventListener("error", releaseUrl, { once: true });
-    return media;
+    button.appendChild(media);
+    button.addEventListener("click", () => window.selectUploadPreview(index));
+    return button;
 }
 
 function renderFileMetadataFields(files) {
@@ -474,7 +484,7 @@ function renderFileMetadataFields(files) {
         card.dataset.fileIndex = index;
         const heading = document.createElement("div");
         heading.className = "file-metadata-heading";
-        heading.appendChild(createFilePreview(file));
+        heading.appendChild(createFilePreview(file, index));
         const title = document.createElement("div");
         title.className = "file-metadata-title";
         const order = document.createElement("span");
@@ -487,7 +497,7 @@ function renderFileMetadataFields(files) {
         removeButton.className = "remove-selected-file";
         removeButton.title = `Bỏ ${file.name} khỏi danh sách`;
         removeButton.setAttribute("aria-label", removeButton.title);
-        removeButton.innerHTML = '<span class="material-icons-outlined">close</span>';
+        removeButton.textContent = "×";
         removeButton.addEventListener("click", () => window.removeSelectedFile(index));
         heading.append(title, removeButton);
         card.appendChild(heading);
@@ -511,10 +521,10 @@ function renderMainPreview() {
     videoPreview.removeAttribute("data-object-url");
     videoPreview.style.display = "none";
 
-    const firstFile = selectedFiles[0];
-    if (!firstFile) return;
-    const objectUrl = URL.createObjectURL(firstFile);
-    if (firstFile.type.startsWith("video/")) {
+    const selectedFile = selectedFiles[selectedPreviewIndex];
+    if (!selectedFile) return;
+    const objectUrl = URL.createObjectURL(selectedFile);
+    if (selectedFile.type.startsWith("video/")) {
         videoPreview.src = objectUrl;
         videoPreview.dataset.objectUrl = objectUrl;
         videoPreview.style.display = "block";
@@ -537,14 +547,37 @@ function refreshUploadSelection() {
     }
     const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
     const sizeInMb = (totalSize / 1024 / 1024).toFixed(totalSize >= 10 * 1024 * 1024 ? 0 : 1);
-    selectedInfo.textContent = `${selectedFiles.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp đầu tiên`;
+    selectedInfo.textContent = `${selectedFiles.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp ${selectedPreviewIndex + 1}`;
     dropText.style.display = "none";
+}
+
+window.selectUploadPreview = (index) => {
+    if (!selectedFiles[index]) return;
+    selectedPreviewIndex = index;
+    renderMainPreview();
+    document.querySelectorAll(".file-metadata-thumbnail").forEach((thumbnail) => {
+        thumbnail.classList.toggle("active", Number(thumbnail.dataset.fileIndex) === index);
+    });
+    refreshUploadSelectionInfo();
+};
+
+function refreshUploadSelectionInfo() {
+    const selectedInfo = document.getElementById("selectedFilesInfo");
+    if (!selectedFiles.length) {
+        selectedInfo.textContent = "";
+        return;
+    }
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    const sizeInMb = (totalSize / 1024 / 1024).toFixed(totalSize >= 10 * 1024 * 1024 ? 0 : 1);
+    selectedInfo.textContent = `${selectedFiles.length} tệp đã chọn · ${sizeInMb} MB · xem trước tệp ${selectedPreviewIndex + 1}`;
 }
 
 window.removeSelectedFile = (index) => {
     metadataDrafts = captureMetadataDrafts();
     selectedFiles.splice(index, 1);
     metadataDrafts.splice(index, 1);
+    if (index < selectedPreviewIndex) selectedPreviewIndex -= 1;
+    selectedPreviewIndex = Math.min(selectedPreviewIndex, Math.max(0, selectedFiles.length - 1));
     syncFileInput();
     refreshUploadSelection();
 };
@@ -552,6 +585,7 @@ window.removeSelectedFile = (index) => {
 function resetUploadForm() {
     selectedFiles = [];
     metadataDrafts = [];
+    selectedPreviewIndex = 0;
     document.getElementById("imageInput").value = "";
     refreshUploadSelection();
 }
@@ -559,6 +593,7 @@ function resetUploadForm() {
 document.getElementById("imageInput").addEventListener("change", (event) => {
     selectedFiles = [...event.target.files];
     metadataDrafts = [];
+    selectedPreviewIndex = 0;
     refreshUploadSelection();
 });
 
