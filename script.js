@@ -10,6 +10,7 @@ let metadataDrafts = [];
 let selectedPreviewIndex = 0;
 let activeDetailItem = null;
 const selectedAdminIds = new Set();
+let adminCollections = [];
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -66,6 +67,127 @@ function updateAdminSelectionControls() {
     document.getElementById("adminSelectionCount").textContent = count ? `${count} TỆP ĐÃ CHỌN` : "CHƯA CHỌN TỆP";
     document.getElementById("bulkEditButton").disabled = count === 0;
     document.getElementById("clearAdminSelection").hidden = count === 0;
+}
+
+async function loadAdminCollections() {
+    try {
+        const snapshot = await getDocs(collection(db, "collections"));
+        adminCollections = snapshot.docs
+            .map((document) => ({ id: document.id, ...document.data() }))
+            .filter((item) => item.name)
+            .sort((first, second) => String(first.name).localeCompare(String(second.name), "vi"));
+    } catch (error) {
+        adminCollections = [];
+        console.warn("Không thể tải bộ sưu tập:", error);
+    }
+}
+
+function makeCollectionAction(label, icon, handler, className = "secondary-action") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.innerHTML = `<span class="material-icons-outlined">${icon}</span> ${label}`;
+    button.addEventListener("click", handler);
+    return button;
+}
+
+function renderAdminCollections() {
+    const list = document.getElementById("adminCollectionList");
+    list.replaceChildren();
+    if (!adminCollections.length) {
+        const empty = document.createElement("p");
+        empty.className = "collection-empty";
+        empty.textContent = "Chưa có album. Tạo album đầu tiên để phân loại ảnh trong archive.";
+        list.appendChild(empty);
+        return;
+    }
+    adminCollections.forEach((collectionItem) => {
+        const card = document.createElement("article");
+        card.className = "admin-collection-card";
+        const photoIds = (collectionItem.photoIds || []).filter((id) => allImages.some((item) => item.id === id));
+        const coverItem = photoIds.map((id) => allImages.find((item) => item.id === id)).find(Boolean);
+        const cover = document.createElement(coverItem && isVideo(coverItem) ? "video" : "img");
+        cover.className = "admin-collection-cover";
+        if (coverItem) {
+            cover.src = isVideo(coverItem) ? coverItem.url : getOptimizedUrl(coverItem.url);
+            if (cover instanceof HTMLVideoElement) { cover.muted = true; cover.playsInline = true; }
+        } else {
+            cover.src = "logo.jpg";
+            cover.alt = "Album chưa có ảnh";
+        }
+        const info = document.createElement("div");
+        info.className = "admin-collection-info";
+        const title = document.createElement("h3");
+        title.textContent = collectionItem.name;
+        const description = document.createElement("p");
+        description.textContent = collectionItem.description || "Chưa có mô tả.";
+        const count = document.createElement("small");
+        count.textContent = `${photoIds.length} ảnh`;
+        info.append(title, description, count);
+        const actions = document.createElement("div");
+        actions.className = "admin-collection-actions";
+        actions.append(
+            makeCollectionAction("THÊM ẢNH ĐÃ CHỌN", "add_photo_alternate", () => updateCollectionItems(collectionItem, true)),
+            makeCollectionAction("GỠ ẢNH ĐÃ CHỌN", "remove_circle_outline", () => updateCollectionItems(collectionItem, false)),
+            makeCollectionAction("XÓA ALBUM", "delete_outline", () => deleteAdminCollection(collectionItem), "danger-action")
+        );
+        card.append(cover, info, actions);
+        list.appendChild(card);
+    });
+}
+
+async function updateCollectionItems(collectionItem, shouldAdd) {
+    if (!selectedAdminIds.size) return showToast("Hãy chọn ít nhất một ảnh trong Nội dung đã lưu trước.", "error");
+    const selectedIds = [...selectedAdminIds];
+    const existing = collectionItem.photoIds || [];
+    const photoIds = shouldAdd ? [...new Set([...existing, ...selectedIds])] : existing.filter((id) => !selectedAdminIds.has(id));
+    if (photoIds.length === existing.length && shouldAdd) return showToast("Các ảnh đã chọn đều có trong album này.", "error");
+    try {
+        await updateDoc(doc(db, "collections", collectionItem.id), { photoIds });
+        collectionItem.photoIds = photoIds;
+        renderAdminCollections();
+        showToast(shouldAdd ? `Đã thêm ${selectedIds.length} ảnh vào “${collectionItem.name}”.` : `Đã gỡ ảnh đã chọn khỏi “${collectionItem.name}”.`);
+    } catch (error) {
+        console.error(error);
+        showToast("Không thể cập nhật album. Hãy kiểm tra Firestore Rules.", "error");
+    }
+}
+
+async function createAdminCollection(event) {
+    event.preventDefault();
+    const nameInput = document.getElementById("adminCollectionName");
+    const descriptionInput = document.getElementById("adminCollectionDescription");
+    const name = nameInput.value.trim();
+    const description = descriptionInput.value.trim();
+    if (!name) return;
+    if (adminCollections.some((item) => item.name.trim().toLocaleLowerCase("vi") === name.toLocaleLowerCase("vi"))) {
+        return showToast("Album cùng tên đã tồn tại.", "error");
+    }
+    try {
+        const reference = await addDoc(collection(db, "collections"), { name, description, photoIds: [], createdAt: new Date() });
+        adminCollections.push({ id: reference.id, name, description, photoIds: [] });
+        adminCollections.sort((first, second) => first.name.localeCompare(second.name, "vi"));
+        nameInput.value = "";
+        descriptionInput.value = "";
+        renderAdminCollections();
+        showToast(`Đã tạo album “${name}”.`);
+    } catch (error) {
+        console.error(error);
+        showToast("Không thể tạo album. Hãy publish Firestore Rules cho collections.", "error");
+    }
+}
+
+async function deleteAdminCollection(collectionItem) {
+    if (!confirm(`Xóa album “${collectionItem.name}”? Ảnh trong archive sẽ không bị xóa.`)) return;
+    try {
+        await deleteDoc(doc(db, "collections", collectionItem.id));
+        adminCollections = adminCollections.filter((item) => item.id !== collectionItem.id);
+        renderAdminCollections();
+        showToast("Đã xóa album. Ảnh gốc vẫn được giữ nguyên.");
+    } catch (error) {
+        console.error(error);
+        showToast("Không thể xóa album.", "error");
+    }
 }
 
 function refreshDetailPanel() {
@@ -581,10 +703,14 @@ async function loadImages() {
     const gallery = document.getElementById("gallery");
     gallery.textContent = "Đang tải thư viện…";
     try {
-        const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
+        const [snapshot] = await Promise.all([
+            getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
+            loadAdminCollections()
+        ]);
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         filteredImages = [...allImages];
         renderDashboard();
+        renderAdminCollections();
         renderFilterTags();
         goToPage(1, { scroll: false });
     } catch (error) {
@@ -866,6 +992,7 @@ document.getElementById("detailEdit").addEventListener("click", () => {
     window.closeMediaDetails();
     window.editPhoto(item);
 });
+document.getElementById("adminCollectionForm").addEventListener("submit", createAdminCollection);
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "ArrowRight") goToPage(currentPage + 1);

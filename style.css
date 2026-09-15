@@ -152,6 +152,34 @@ button { color: inherit; }
 .pagination-dots { color: var(--muted); }
 
 .upload-console { margin-top: 44px; padding: clamp(22px, 4vw, 42px); border: 1px solid var(--line-strong); background: linear-gradient(110deg, var(--surface), rgba(12, 41, 43, .55)); }
+.collection-console { margin-top: 24px; padding: clamp(22px, 3.5vw, 36px); border: 1px solid var(--line-strong); background: rgba(9, 37, 39, .68); }
+.admin-collection-form { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(230px, 1.4fr) auto; gap: 10px; margin-top: 24px; }
+.admin-collection-form input { min-width: 0; margin: 0; padding: 0 13px; border: 1px solid var(--line-strong); background: rgba(2, 14, 15, .48); }
+.admin-collection-form .btn-primary { width: auto; min-height: 46px; white-space: nowrap; }
+.collection-admin-hint { margin: 13px 0 20px; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.admin-collection-list { display: grid; gap: 10px; }
+.admin-collection-card { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; gap: 15px; align-items: center; min-height: 110px; padding: 10px; border: 1px solid var(--line); background: rgba(2, 14, 15, .2); }
+.admin-collection-cover { display: block; width: 104px; height: 88px; overflow: hidden; background: #020e0f; object-fit: cover; }
+.admin-collection-info { min-width: 0; }
+.admin-collection-info h3 { margin: 0; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 1.4rem; letter-spacing: .02em; }
+.admin-collection-info p { max-width: 65ch; margin: 5px 0; overflow: hidden; color: var(--muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+.admin-collection-info small { color: var(--accent); font-family: "Barlow Condensed", sans-serif; font-size: .78rem; font-weight: 700; letter-spacing: .08em; }
+.admin-collection-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
+.admin-collection-actions .secondary-action, .admin-collection-actions .danger-action { min-height: 34px; margin: 0; padding: 0 9px; font-size: .74rem; }
+.collection-view { padding: 34px 0 82px; }
+.collection-browser { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding-top: 27px; }
+.collection-browser .empty-state { grid-column: 1 / -1; }
+.collection-browser-card { position: relative; display: grid; grid-template-columns: minmax(145px, .58fr) minmax(0, 1fr); min-height: 220px; overflow: hidden; border: 1px solid var(--line-strong); background: linear-gradient(110deg, rgba(12, 48, 50, .96), rgba(8, 32, 34, .9)); cursor: pointer; transition: border-color .2s, transform .2s, box-shadow .2s; }
+.collection-browser-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 8px 9px 0 rgba(255, 92, 66, .18); }
+.collection-card-index { position: absolute; z-index: 2; top: 8px; left: 10px; color: #fff; font-family: "Barlow Condensed", sans-serif; font-size: 1.05rem; font-weight: 800; text-shadow: 0 1px 8px #000; }
+.collection-card-cover { display: block; width: 100%; height: 100%; min-height: 220px; background: #020e0f; object-fit: cover; filter: saturate(.82); transition: filter .2s, transform .25s; }
+.collection-browser-card:hover .collection-card-cover { filter: saturate(1.1); transform: scale(1.025); }
+.collection-card-content { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; padding: 28px 26px 25px; }
+.collection-card-content .kicker { margin: 0 0 8px; color: var(--accent); font-size: .65rem; }
+.collection-card-content h3 { margin: 0; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: clamp(1.8rem, 3vw, 2.8rem); font-weight: 800; line-height: .92; letter-spacing: .01em; overflow-wrap: anywhere; }
+.collection-card-description { margin: 12px 0 0; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.collection-card-total { display: inline-flex; align-items: center; gap: 6px; margin-top: 17px; padding: 7px 9px; color: var(--text); background: rgba(0, 0, 0, .32); font-family: "Barlow Condensed", sans-serif; font-size: .82rem; font-weight: 700; letter-spacing: .04em; }
+.collection-card-total .material-icons-outlined { font-size: 15px; }
 .admin-dashboard { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 32px; }
 .dashboard-card { min-height: 132px; padding: 18px; border: 1px solid var(--line); background: rgba(12, 41, 43, .62); }
 .dashboard-card > span { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .76rem; font-weight: 700; letter-spacing: .11em; }
@@ -258,6 +286,9 @@ button { color: inherit; }
     .upload-grid { grid-template-columns: 1fr; }
     .advanced-filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
     .admin-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .admin-collection-form { grid-template-columns: 1fr 1fr; }
+    .admin-collection-form .btn-primary { grid-column: 1 / -1; width: 100%; }
+    .collection-browser { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
     .site-header { min-height: 70px; padding: 12px 16px; }
@@ -281,6 +312,16 @@ button { color: inherit; }
     .selection-toolbar .secondary-action, .selection-toolbar .btn-primary { width: 100%; }
     .selection-count { width: 100%; margin-left: 0; }
     .admin-dashboard { grid-template-columns: 1fr; }
+    .admin-collection-form { grid-template-columns: 1fr; }
+    .admin-collection-card { grid-template-columns: 76px minmax(0, 1fr); gap: 11px; }
+    .admin-collection-cover { width: 76px; height: 76px; }
+    .admin-collection-actions { grid-column: 1 / -1; justify-content: stretch; }
+    .admin-collection-actions .secondary-action, .admin-collection-actions .danger-action { flex: 1 1 100%; }
+    .collection-browser-card { grid-template-columns: 124px minmax(0, 1fr); min-height: 178px; }
+    .collection-card-cover { min-height: 178px; }
+    .collection-card-content { padding: 22px 16px; }
+    .collection-card-content h3 { font-size: 2rem; }
+    .collection-card-description { display: none; }
     .admin-bulk-toolbar > span, .admin-bulk-toolbar .secondary-action, .admin-bulk-toolbar .btn-primary { width: 100%; margin-right: 0; }
     .selection-toggle { opacity: 1; }
     .gallery-grid { columns: 1; }

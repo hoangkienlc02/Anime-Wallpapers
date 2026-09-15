@@ -446,10 +446,20 @@ function syncRouteControls(path, tag = "") {
 
 function renderRoute() {
     const path = decodeURIComponent(location.pathname.replace(/\/+$/, "")) || "/";
-    if (path.startsWith("/collection/")) {
-        history.replaceState({}, "", "/wallpapers");
-        return renderRoute();
+    const collectionView = document.getElementById("collectionView");
+    const libraryGallery = document.getElementById("libraryGallery");
+    const discoverPanel = document.querySelector(".discover-panel");
+    if (path === "/collections") {
+        discoverPanel.hidden = true;
+        libraryGallery.hidden = true;
+        collectionView.hidden = false;
+        renderCollectionsPage();
+        syncRouteControls(path);
+        return;
     }
+    discoverPanel.hidden = false;
+    libraryGallery.hidden = false;
+    collectionView.hidden = true;
     const queryText = new URLSearchParams(location.search).get("q")?.trim().toLowerCase() || "";
     const searchInput = document.getElementById("searchInput");
     let data = [...allImages];
@@ -475,12 +485,23 @@ function renderRoute() {
     } else if (path === "/downloads") {
         activeTag = "downloads";
         data = data.filter((item) => isDownloaded(item));
+    } else if (path.startsWith("/collection/")) {
+        const collectionId = path.slice("/collection/".length);
+        const collectionItem = libraryCollections.find((item) => item.id === collectionId);
+        if (!collectionItem) {
+            history.replaceState({}, "", "/collections");
+            return renderRoute();
+        }
+        data = data.filter((item) => collectionItem.photoIds?.includes(item.id));
+        document.getElementById("libraryKicker").textContent = `BỘ SƯU TẬP · ${collectionItem.name}`;
     } else if (path.startsWith("/tag/")) {
         activeTag = path.slice("/tag/".length).toLowerCase();
         data = filterByTerm(activeTag);
     } else if (path !== "/" && path !== "/wallpapers" && path !== "/search") {
         history.replaceState({}, "", "/wallpapers");
     }
+
+    if (!path.startsWith("/collection/")) document.getElementById("libraryKicker").textContent = "THƯ VIỆN CỦA BẠN";
 
     if (queryText) {
         activeTag = "";
@@ -572,6 +593,56 @@ async function loadCollections() {
         libraryCollections = [];
         console.warn("Không thể tải bộ sưu tập:", error);
     }
+}
+
+function renderCollectionsPage() {
+    const browser = document.getElementById("collectionBrowser");
+    browser.replaceChildren();
+    document.getElementById("collectionViewCount").textContent = `${libraryCollections.length} — ALBUM`;
+    if (!libraryCollections.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = "Chưa có bộ sưu tập nào. Hãy tạo album trong trang Quản trị.";
+        browser.appendChild(empty);
+        return;
+    }
+    libraryCollections.forEach((collectionItem, index) => {
+        const card = document.createElement("article");
+        card.className = "collection-browser-card";
+        const photoIds = (collectionItem.photoIds || []).filter((id) => allImages.some((item) => item.id === id));
+        const coverItem = photoIds.map((id) => allImages.find((item) => item.id === id)).find(Boolean);
+        const indexLabel = document.createElement("span");
+        indexLabel.className = "collection-card-index";
+        indexLabel.textContent = String(index + 1).padStart(2, "0");
+        const cover = document.createElement(coverItem && isVideo(coverItem) ? "video" : "img");
+        cover.className = "collection-card-cover";
+        if (coverItem) {
+            cover.src = isVideo(coverItem) ? coverItem.url : getOptimizedUrl(coverItem.url);
+            if (cover instanceof HTMLVideoElement) { cover.muted = true; cover.loop = true; cover.playsInline = true; }
+        } else {
+            cover.src = "logo.jpg";
+            cover.alt = "Album chưa có ảnh";
+        }
+        const content = document.createElement("div");
+        content.className = "collection-card-content";
+        const label = document.createElement("p");
+        label.className = "kicker";
+        label.textContent = "BỘ SƯU TẬP";
+        const title = document.createElement("h3");
+        title.textContent = collectionItem.name;
+        const description = document.createElement("p");
+        description.className = "collection-card-description";
+        description.textContent = collectionItem.description || "Album wallpaper được tuyển chọn riêng.";
+        const total = document.createElement("span");
+        total.className = "collection-card-total";
+        total.innerHTML = `<span class="material-icons-outlined">grid_view</span> ${photoIds.length} ảnh`;
+        content.append(label, title, description, total);
+        card.append(indexLabel, cover, content);
+        card.addEventListener("click", () => navigateTo(`/collection/${encodeURIComponent(collectionItem.id)}`));
+        card.addEventListener("mouseenter", () => { if (cover instanceof HTMLVideoElement) cover.play(); });
+        card.addEventListener("mouseleave", () => { if (cover instanceof HTMLVideoElement) cover.pause(); });
+        browser.appendChild(card);
+    });
 }
 
 function renderCollectionModal() {
@@ -728,7 +799,10 @@ async function loadImages() {
     const gallery = document.getElementById("gallery");
     gallery.textContent = "Đang tải thư viện…";
     try {
-        const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
+        const [snapshot] = await Promise.all([
+            getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
+            loadCollections()
+        ]);
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         populateAdvancedFilters();
         syncAdvancedFilterControls();
