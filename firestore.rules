@@ -1,16 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return signedIn() && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
+    }
+
     match /photos/{photoId} {
-      // One private account owns the whole gallery.
-      allow read, create, update, delete: if request.auth != null
-        && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
+      // Registered accounts can view; only the owner can manage archive data.
+      allow read: if signedIn();
+      allow create, update, delete: if isOwner();
     }
 
     match /collections/{collectionId} {
-      // Private albums for the same gallery owner.
-      allow read, create, update, delete: if request.auth != null
-        && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
+      allow read: if signedIn();
+      allow create, update, delete: if isOwner();
     }
   }
 }

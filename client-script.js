@@ -131,6 +131,10 @@ function isLiked(item) {
     return localStorage.getItem(`anime-wallpaper-liked:${item.id}`) === "true";
 }
 
+function isFavorite(item) {
+    return localStorage.getItem(`anime-wallpaper-favorite:${item.id}`) === "true";
+}
+
 function isDownloaded(item) {
     return localStorage.getItem(`anime-wallpaper-downloaded:${item.id}`) === "true";
 }
@@ -152,7 +156,7 @@ function refreshDetailPanel() {
     const likeButton = document.getElementById("detailLike");
     likeButton.innerHTML = `<span class="material-icons-outlined">${liked ? "favorite" : "favorite_border"}</span> ${liked ? "ĐÃ THÍCH" : "THÍCH"}`;
     const favoriteButton = document.getElementById("detailFavorite");
-    const favorite = Boolean(item.favorite);
+    const favorite = isFavorite(item);
     favoriteButton.innerHTML = `<span class="material-icons-outlined">${favorite ? "bookmark" : "bookmark_border"}</span> ${favorite ? "ĐÃ LƯU YÊU THÍCH" : "LƯU YÊU THÍCH"}`;
     favoriteButton.classList.toggle("is-active", favorite);
     document.getElementById("detailOpenOriginal").href = item.url;
@@ -224,24 +228,17 @@ async function toggleLike() {
     }
 }
 
-async function toggleFavorite(item = activeDetailItem) {
+function toggleFavorite(item = activeDetailItem) {
     if (!item) return;
-    const previous = Boolean(item.favorite);
-    item.favorite = !previous;
+    const favorite = !isFavorite(item);
+    localStorage.setItem(`anime-wallpaper-favorite:${item.id}`, String(favorite));
     if (activeDetailItem?.id === item.id) refreshDetailPanel();
     document.querySelectorAll(`[data-favorite-id="${CSS.escape(item.id)}"]`).forEach((button) => {
-        button.classList.toggle("is-favorite", item.favorite);
-        button.innerHTML = `<span class="material-icons-outlined">${item.favorite ? "bookmark" : "bookmark_border"}</span>`;
+        button.classList.toggle("is-favorite", favorite);
+        button.innerHTML = `<span class="material-icons-outlined">${favorite ? "bookmark" : "bookmark_border"}</span>`;
     });
-    try {
-        await updateDoc(doc(db, "photos", item.id), { favorite: item.favorite });
-        if (location.pathname === "/favorites") renderRoute();
-        showToast(item.favorite ? "Đã lưu vào Yêu thích." : "Đã bỏ khỏi Yêu thích.");
-    } catch (error) {
-        item.favorite = previous;
-        if (activeDetailItem?.id === item.id) refreshDetailPanel();
-        showToast("Không thể cập nhật Yêu thích. Hãy kiểm tra Firebase Rules.", "error");
-    }
+    if (location.pathname === "/favorites") renderRoute();
+    showToast(favorite ? "Đã lưu vào Yêu thích." : "Đã bỏ khỏi Yêu thích.");
 }
 
 window.downloadImage = async (url, filename) => {
@@ -347,10 +344,11 @@ function renderGallery(data) {
         if (item.seriesName) info.appendChild(makeTag(item.seriesName));
         const actions = document.createElement("div");
         actions.className = "actions";
-        const favoriteButton = makeAction(item.favorite ? "bookmark" : "bookmark_border", item.favorite ? "Bỏ Yêu thích" : "Lưu Yêu thích", () => toggleFavorite(item));
+        const favorite = isFavorite(item);
+        const favoriteButton = makeAction(favorite ? "bookmark" : "bookmark_border", favorite ? "Bỏ Yêu thích" : "Lưu Yêu thích", () => toggleFavorite(item));
         favoriteButton.classList.add("favorite-action");
         favoriteButton.dataset.favoriteId = item.id;
-        favoriteButton.classList.toggle("is-favorite", Boolean(item.favorite));
+        favoriteButton.classList.toggle("is-favorite", favorite);
         actions.appendChild(favoriteButton);
         actions.appendChild(makeAction("file_download", "Tải xuống", () => {
             trackInteraction(item, "downloads");
@@ -481,7 +479,7 @@ function renderRoute() {
     else if (path === "/videos") data = data.filter((item) => isVideo(item));
     else if (path === "/favorites") {
         activeTag = "favorites";
-        data = data.filter((item) => item.favorite);
+        data = data.filter((item) => isFavorite(item));
     } else if (path === "/downloads") {
         activeTag = "downloads";
         data = data.filter((item) => isDownloaded(item));

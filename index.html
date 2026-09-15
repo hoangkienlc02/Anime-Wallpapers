@@ -13,12 +13,15 @@
     <div id="sessionLoader" class="session-loader" role="status" aria-live="polite"><div><span class="brand-mark">AW</span><p>ĐANG MỞ KHO LƯU TRỮ…</p></div></div>
     <section id="authGate" class="auth-gate">
         <form id="loginForm" class="login-card">
-            <span class="kicker">PRIVATE ARCHIVE</span><h1>ANIME<br><em>WALLPAPERS</em></h1>
-            <p>Đăng nhập để mở bộ sưu tập hình nền riêng của bạn.</p>
+            <span id="authKicker" class="kicker">PRIVATE ARCHIVE</span><h1>ANIME<br><em>WALLPAPERS</em></h1>
+            <p id="authIntro">Đăng nhập để mở bộ sưu tập hình nền riêng của bạn.</p>
+            <div class="auth-mode-toggle" role="tablist" aria-label="Chọn đăng nhập hoặc đăng ký"><button class="active" type="button" data-auth-mode="login">ĐĂNG NHẬP</button><button type="button" data-auth-mode="register">ĐĂNG KÝ</button></div>
             <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
-            <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" required></label>
+            <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" minlength="6" required></label>
+            <label id="confirmPasswordField" hidden>Nhập lại mật khẩu <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6"></label>
             <p id="loginError" class="login-error" aria-live="polite"></p>
-            <button class="btn-primary" type="submit">MỞ KHO LƯU TRỮ <span class="material-icons-outlined">arrow_forward</span></button>
+            <button id="authSubmitButton" class="btn-primary" type="submit">MỞ KHO LƯU TRỮ <span class="material-icons-outlined">arrow_forward</span></button>
+            <p class="auth-switch">Chưa có tài khoản? <button id="authSwitchButton" type="button">ĐĂNG KÝ NGAY</button></p>
         </form>
     </section>
     <div id="appShell" hidden>
