@@ -11,6 +11,8 @@ let selectedPreviewIndex = 0;
 let activeDetailItem = null;
 const selectedAdminIds = new Set();
 let adminCollections = [];
+let activeCollectionPicker = null;
+let collectionPickerIds = new Set();
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -87,7 +89,10 @@ function makeCollectionAction(label, icon, handler, className = "secondary-actio
     button.type = "button";
     button.className = className;
     button.innerHTML = `<span class="material-icons-outlined">${icon}</span> ${label}`;
-    button.addEventListener("click", handler);
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        handler(event);
+    });
     return button;
 }
 
@@ -127,11 +132,11 @@ function renderAdminCollections() {
         const actions = document.createElement("div");
         actions.className = "admin-collection-actions";
         actions.append(
-            makeCollectionAction("THÊM ẢNH ĐÃ CHỌN", "add_photo_alternate", () => updateCollectionItems(collectionItem, true)),
-            makeCollectionAction("GỠ ẢNH ĐÃ CHỌN", "remove_circle_outline", () => updateCollectionItems(collectionItem, false)),
+            makeCollectionAction("CHỌN ẢNH", "photo_library", () => openCollectionPicker(collectionItem)),
             makeCollectionAction("XÓA ALBUM", "delete_outline", () => deleteAdminCollection(collectionItem), "danger-action")
         );
         card.append(cover, info, actions);
+        card.addEventListener("click", () => openCollectionPicker(collectionItem));
         list.appendChild(card);
     });
 }
@@ -153,6 +158,97 @@ async function updateCollectionItems(collectionItem, shouldAdd) {
     }
 }
 
+function itemMatchesCollectionSearch(item, term) {
+    return [item.device, item.theme, item.subName, item.seriesName, item.artistName]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("vi")
+        .includes(term);
+}
+
+function renderCollectionPicker() {
+    const grid = document.getElementById("collectionPickerGrid");
+    const count = document.getElementById("collectionPickerCount");
+    const queryText = document.getElementById("collectionPickerSearch").value.trim().toLocaleLowerCase("vi");
+    grid.replaceChildren();
+    if (!activeCollectionPicker) return;
+    const matchingImages = allImages.filter((item) => !queryText || itemMatchesCollectionSearch(item, queryText));
+    count.textContent = `${collectionPickerIds.size} ẢNH ĐÃ CHỌN`;
+    if (!matchingImages.length) {
+        const empty = document.createElement("p");
+        empty.className = "collection-empty";
+        empty.textContent = "Không tìm thấy ảnh phù hợp trong archive.";
+        grid.appendChild(empty);
+        return;
+    }
+    matchingImages.forEach((item) => {
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "collection-picker-tile";
+        tile.classList.toggle("is-selected", collectionPickerIds.has(item.id));
+        tile.title = item.subName || item.seriesName || item.theme || "Wallpaper";
+        const media = document.createElement(isVideo(item) ? "video" : "img");
+        media.src = isVideo(item) ? item.url : getOptimizedUrl(item.url);
+        media.alt = tile.title;
+        if (media instanceof HTMLVideoElement) { media.muted = true; media.playsInline = true; media.preload = "metadata"; }
+        const check = document.createElement("span");
+        check.className = "collection-picker-check material-icons-outlined";
+        check.textContent = collectionPickerIds.has(item.id) ? "check_circle" : "add_circle_outline";
+        tile.append(media, check);
+        tile.addEventListener("click", () => {
+            if (collectionPickerIds.has(item.id)) collectionPickerIds.delete(item.id);
+            else collectionPickerIds.add(item.id);
+            renderCollectionPicker();
+        });
+        grid.appendChild(tile);
+    });
+}
+
+function openCollectionPicker(collectionItem) {
+    activeCollectionPicker = collectionItem;
+    collectionPickerIds = new Set((collectionItem.photoIds || []).filter((id) => allImages.some((item) => item.id === id)));
+    document.getElementById("collectionPickerTitle").textContent = collectionItem.name;
+    document.getElementById("collectionPickerSearch").value = "";
+    document.getElementById("collectionPickerModal").style.display = "flex";
+    renderCollectionPicker();
+}
+
+function closeCollectionPicker() {
+    document.getElementById("collectionPickerModal").style.display = "none";
+    activeCollectionPicker = null;
+    collectionPickerIds.clear();
+}
+window.closeCollectionPicker = closeCollectionPicker;
+
+async function saveCollectionPicker() {
+    if (!activeCollectionPicker) return;
+    const collectionName = activeCollectionPicker.name;
+    const photoIds = [...collectionPickerIds];
+    const saveButton = document.getElementById("collectionPickerSave");
+    saveButton.disabled = true;
+    try {
+        await updateDoc(doc(db, "collections", activeCollectionPicker.id), { photoIds });
+        activeCollectionPicker.photoIds = photoIds;
+        renderAdminCollections();
+        closeCollectionPicker();
+        showToast(`Đã cập nhật album “${collectionName}”.`);
+    } catch (error) {
+        console.error(error);
+        showToast("Không thể cập nhật album. Hãy kiểm tra Firestore Rules.", "error");
+    } finally {
+        saveButton.disabled = false;
+    }
+}
+
+async function attachUploadedPhotoToCollection(photoId, collectionId) {
+    if (!collectionId) return;
+    const collectionItem = adminCollections.find((item) => item.id === collectionId);
+    if (!collectionItem) return;
+    const photoIds = [...new Set([...(collectionItem.photoIds || []), photoId])];
+    await updateDoc(doc(db, "collections", collectionId), { photoIds });
+    collectionItem.photoIds = photoIds;
+}
+
 async function createAdminCollection(event) {
     event.preventDefault();
     const nameInput = document.getElementById("adminCollectionName");
@@ -170,6 +266,10 @@ async function createAdminCollection(event) {
         nameInput.value = "";
         descriptionInput.value = "";
         renderAdminCollections();
+        if (selectedFiles.length) {
+            metadataDrafts = captureMetadataDrafts();
+            renderFileMetadataFields(selectedFiles);
+        }
         showToast(`Đã tạo album “${name}”.`);
     } catch (error) {
         console.error(error);
@@ -287,6 +387,7 @@ async function getFileHash(file) {
 }
 
 async function uploadOneFile(file, metadata) {
+    const { collectionId, ...photoMetadata } = metadata;
     const resourceType = file.type.startsWith("video/") ? "video" : "image";
     const signature = await secureApi("/api/upload-signature", { resourceType });
     const formData = new FormData();
@@ -310,13 +411,14 @@ async function uploadOneFile(file, metadata) {
     if (!upload.ok) throw new Error(media.error?.message || `Cloudinary từ chối tệp (HTTP ${upload.status}).`);
 
     try {
-        await addDoc(collection(db, "photos"), {
+        const reference = await addDoc(collection(db, "photos"), {
             url: media.secure_url,
             publicId: media.public_id,
             type: resourceType,
-            ...metadata,
+            ...photoMetadata,
             createdAt: new Date()
         });
+        return reference.id;
     } catch (error) {
         // Do not leave an inaccessible Cloudinary asset behind when Firestore rejects its metadata.
         try {
@@ -336,7 +438,8 @@ function readFileMetadata(index) {
         theme: card.querySelector('[data-field="theme"]').value.trim(),
         subName: card.querySelector('[data-field="subName"]').value.trim(),
         seriesName: card.querySelector('[data-field="seriesName"]').value.trim(),
-        artistName: card.querySelector('[data-field="artistName"]').value.trim()
+        artistName: card.querySelector('[data-field="artistName"]').value.trim(),
+        collectionId: card.querySelector('[data-field="collectionId"]')?.value || ""
     };
 }
 
@@ -385,13 +488,20 @@ window.handleUpload = async () => {
     uploadButton.disabled = true;
     let succeeded = 0;
     const failures = [];
+    const collectionFailures = [];
     try {
         for (const [index, item] of uploadQueue.entries()) {
             const { file, metadata } = item;
             uploadButton.innerHTML = `<span class="material-icons-outlined">cloud_upload</span> ĐANG TẢI ${index + 1}/${uploadQueue.length}`;
             try {
                 const technicalMetadata = await getFileTechnicalMetadata(file);
-                await uploadOneFile(file, { ...metadata, ...technicalMetadata });
+                const photoId = await uploadOneFile(file, { ...metadata, ...technicalMetadata });
+                try {
+                    await attachUploadedPhotoToCollection(photoId, metadata.collectionId);
+                } catch (collectionError) {
+                    console.error(`Không thể thêm ${file.name} vào bộ sưu tập:`, collectionError);
+                    collectionFailures.push(file.name);
+                }
                 succeeded += 1;
             } catch (error) {
                 console.error(`Không thể tải ${file.name}:`, error);
@@ -408,6 +518,7 @@ window.handleUpload = async () => {
             showToast(`${failed}/${uploadQueue.length} tệp không tải được. ${firstFailure.message}`, "error");
         }
         if (duplicateFiles.length) showToast(`Đã bỏ qua ${duplicateFiles.length} tệp trùng: ${duplicateFiles[0]}`, "error");
+        if (collectionFailures.length) showToast(`${collectionFailures.length} tệp đã tải nhưng chưa được thêm vào bộ sưu tập.`, "error");
         await loadImages();
     } catch (error) {
         console.error(error);
@@ -732,8 +843,32 @@ function addMetadataInput(card, labelText, field, placeholder, value = "", requi
     card.appendChild(label);
 }
 
+function addCollectionSelect(card, value = "") {
+    const label = document.createElement("label");
+    label.textContent = "THÊM VÀO BỘ SƯU TẬP";
+    const select = document.createElement("select");
+    select.dataset.field = "collectionId";
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "Chưa thêm vào album";
+    select.appendChild(emptyOption);
+    adminCollections.forEach((collectionItem) => {
+        const option = document.createElement("option");
+        option.value = collectionItem.id;
+        option.textContent = collectionItem.name;
+        option.selected = collectionItem.id === value;
+        select.appendChild(option);
+    });
+    if (!adminCollections.length) {
+        select.disabled = true;
+        emptyOption.textContent = "Tạo album trước để lựa chọn";
+    }
+    label.appendChild(select);
+    card.appendChild(label);
+}
+
 function captureMetadataDrafts() {
-    return selectedFiles.map((_, index) => readFileMetadata(index) || { device: "", theme: "", subName: "", seriesName: "", artistName: "" });
+    return selectedFiles.map((_, index) => readFileMetadata(index) || { device: "", theme: "", subName: "", seriesName: "", artistName: "", collectionId: "" });
 }
 
 function syncFileInput() {
@@ -806,6 +941,7 @@ function renderFileMetadataFields(files) {
         addMetadataInput(card, "NHÂN VẬT / TÊN", "subName", "Ví dụ: Luffy, Jinx", draft.subName);
         addMetadataInput(card, "TÊN GAME / ANIME", "seriesName", "Ví dụ: Genshin Impact", draft.seriesName);
         addMetadataInput(card, "TÊN ARTIST", "artistName", "Ví dụ: Hiten", draft.artistName);
+        addCollectionSelect(card, draft.collectionId);
         list.appendChild(card);
     });
 }
@@ -993,6 +1129,10 @@ document.getElementById("detailEdit").addEventListener("click", () => {
     window.editPhoto(item);
 });
 document.getElementById("adminCollectionForm").addEventListener("submit", createAdminCollection);
+document.getElementById("collectionPickerClose").addEventListener("click", closeCollectionPicker);
+document.getElementById("collectionPickerCancel").addEventListener("click", closeCollectionPicker);
+document.getElementById("collectionPickerSave").addEventListener("click", saveCollectionPicker);
+document.getElementById("collectionPickerSearch").addEventListener("input", renderCollectionPicker);
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
