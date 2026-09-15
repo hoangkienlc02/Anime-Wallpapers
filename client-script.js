@@ -369,7 +369,7 @@ function renderFilterTags() {
             if (value) values.set(value, (values.get(value) || 0) + 1);
         });
         [...values.entries()].sort(([first], [second]) => first.localeCompare(second, "vi")).forEach(([value, count]) => {
-            const tag = `${field}:${normalize(value)}`;
+            const tag = `${field.toLowerCase()}:${normalize(value)}`;
             const button = document.createElement("button");
             button.className = "tag-btn metadata-tag";
             button.dataset.tag = tag;
@@ -407,10 +407,11 @@ function filterByTerm(term, source = allImages) {
     if (term === "all") return [...source];
     const separator = term.indexOf(":");
     if (separator > 0) {
-        const field = term.slice(0, separator);
+        const field = term.slice(0, separator).toLowerCase();
         const value = term.slice(separator + 1);
-        if (["theme", "subName", "seriesName", "artistName"].includes(field)) {
-            return source.filter((item) => normalize(item[field]) === value);
+        const metadataFields = { theme: "theme", subname: "subName", seriesname: "seriesName", artistname: "artistName" };
+        if (metadataFields[field]) {
+            return source.filter((item) => normalize(item[metadataFields[field]]) === value);
         }
     }
     return source.filter((item) => itemMatchesText(item, term));
