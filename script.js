@@ -13,6 +13,8 @@ const selectedAdminIds = new Set();
 let adminCollections = [];
 let activeCollectionPicker = null;
 let collectionPickerIds = new Set();
+let collectionPickerPage = 1;
+const collectionPickerPerPage = 20;
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -171,8 +173,12 @@ function renderCollectionPicker() {
     const count = document.getElementById("collectionPickerCount");
     const queryText = document.getElementById("collectionPickerSearch").value.trim().toLocaleLowerCase("vi");
     grid.replaceChildren();
+    document.getElementById("collectionPickerPagination").replaceChildren();
     if (!activeCollectionPicker) return;
     const matchingImages = allImages.filter((item) => !queryText || itemMatchesCollectionSearch(item, queryText));
+    const totalPages = Math.max(1, Math.ceil(matchingImages.length / collectionPickerPerPage));
+    collectionPickerPage = Math.min(collectionPickerPage, totalPages);
+    const pageImages = matchingImages.slice((collectionPickerPage - 1) * collectionPickerPerPage, collectionPickerPage * collectionPickerPerPage);
     count.textContent = `${collectionPickerIds.size} ẢNH ĐÃ CHỌN`;
     if (!matchingImages.length) {
         const empty = document.createElement("p");
@@ -181,7 +187,7 @@ function renderCollectionPicker() {
         grid.appendChild(empty);
         return;
     }
-    matchingImages.forEach((item) => {
+    pageImages.forEach((item) => {
         const tile = document.createElement("button");
         tile.type = "button";
         tile.className = "collection-picker-tile";
@@ -202,11 +208,44 @@ function renderCollectionPicker() {
         });
         grid.appendChild(tile);
     });
+    renderCollectionPickerPagination(totalPages);
+}
+
+function renderCollectionPickerPagination(totalPages) {
+    const container = document.getElementById("collectionPickerPagination");
+    container.replaceChildren();
+    if (totalPages <= 1) return;
+    const addButton = (label, page, disabled = false, active = false) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `page-btn ${active ? "active" : ""}`;
+        button.innerHTML = label;
+        button.disabled = disabled;
+        button.addEventListener("click", () => {
+            collectionPickerPage = page;
+            renderCollectionPicker();
+        });
+        container.appendChild(button);
+    };
+    addButton('<span class="material-icons-outlined">chevron_left</span>', collectionPickerPage - 1, collectionPickerPage === 1);
+    const pages = [...new Set([1, collectionPickerPage - 1, collectionPickerPage, collectionPickerPage + 1, totalPages].filter((page) => page >= 1 && page <= totalPages))]
+        .sort((first, second) => first - second);
+    pages.forEach((page, index) => {
+        if (index && page - pages[index - 1] > 1) {
+            const dots = document.createElement("span");
+            dots.className = "pagination-dots";
+            dots.textContent = "…";
+            container.appendChild(dots);
+        }
+        addButton(String(page), page, false, page === collectionPickerPage);
+    });
+    addButton('<span class="material-icons-outlined">chevron_right</span>', collectionPickerPage + 1, collectionPickerPage === totalPages);
 }
 
 function openCollectionPicker(collectionItem) {
     activeCollectionPicker = collectionItem;
     collectionPickerIds = new Set((collectionItem.photoIds || []).filter((id) => allImages.some((item) => item.id === id)));
+    collectionPickerPage = 1;
     document.getElementById("collectionPickerTitle").textContent = collectionItem.name;
     document.getElementById("collectionPickerSearch").value = "";
     document.getElementById("collectionPickerModal").style.display = "flex";
@@ -217,6 +256,7 @@ function closeCollectionPicker() {
     document.getElementById("collectionPickerModal").style.display = "none";
     activeCollectionPicker = null;
     collectionPickerIds.clear();
+    collectionPickerPage = 1;
 }
 window.closeCollectionPicker = closeCollectionPicker;
 
@@ -1132,7 +1172,10 @@ document.getElementById("adminCollectionForm").addEventListener("submit", create
 document.getElementById("collectionPickerClose").addEventListener("click", closeCollectionPicker);
 document.getElementById("collectionPickerCancel").addEventListener("click", closeCollectionPicker);
 document.getElementById("collectionPickerSave").addEventListener("click", saveCollectionPicker);
-document.getElementById("collectionPickerSearch").addEventListener("input", renderCollectionPicker);
+document.getElementById("collectionPickerSearch").addEventListener("input", () => {
+    collectionPickerPage = 1;
+    renderCollectionPicker();
+});
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
