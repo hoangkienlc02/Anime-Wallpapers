@@ -59,6 +59,7 @@ export function protectPage(onReady) {
         }
         gate.hidden = true;
         appShell.hidden = false;
+        appShell.dataset.userRole = user.uid === OWNER_UID ? "admin" : "client";
         accountLabel.textContent = user.email || "Đã đăng nhập";
         finishSessionCheck();
 
