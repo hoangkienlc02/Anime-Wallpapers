@@ -27,6 +27,7 @@ export function protectPage(onReady) {
     const registrationAllowed = !document.body.classList.contains("admin-page");
     let authMode = "login";
     let hasStarted = false;
+    let authSubmissionInFlight = false;
 
     function setAuthMode(mode) {
         if (mode === "register" && !registrationAllowed) return;
@@ -53,8 +54,11 @@ export function protectPage(onReady) {
     async function revealApp(user) {
         if (!registrationAllowed && user.uid !== OWNER_UID) {
             error.textContent = "Tài khoản này không có quyền truy cập khu vực Quản trị.";
-            await signOut(auth);
-            finishSessionCheck();
+            try {
+                await signOut(auth);
+            } finally {
+                finishSessionCheck();
+            }
             return;
         }
         gate.hidden = true;
@@ -71,7 +75,10 @@ export function protectPage(onReady) {
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
+        if (authSubmissionInFlight) return;
         error.textContent = "";
+        authSubmissionInFlight = true;
+        submitButton.disabled = true;
         try {
             if (authMode === "register" && passwordInput.value !== confirmPasswordInput?.value) {
                 error.textContent = "Mật khẩu nhập lại chưa khớp.";
@@ -99,12 +106,21 @@ export function protectPage(onReady) {
                 "auth/invalid-email": "Email chưa đúng định dạng."
             };
             error.textContent = messages[err.code] || `Không thể đăng nhập (${err.code || "lỗi không xác định"}).`;
+        } finally {
+            authSubmissionInFlight = false;
+            submitButton.disabled = false;
         }
     });
 
-    signOutButton.addEventListener("click", () => {
+    signOutButton.addEventListener("click", async () => {
         document.body.classList.add("auth-pending");
-        signOut(auth);
+        try {
+            await signOut(auth);
+        } catch (err) {
+            console.error("Firebase sign-out failed:", err);
+            document.body.classList.remove("auth-pending");
+            error.textContent = "Không thể đăng xuất. Hãy kiểm tra kết nối rồi thử lại.";
+        }
     });
 
     modeButtons.forEach((button) => button.addEventListener("click", () => setAuthMode(button.dataset.authMode)));

@@ -1,11 +1,11 @@
 # Anime Wallpapers
 
-This gallery is intentionally private: only one Firebase Authentication user can read or modify `photos`.
+This is a private, authenticated wallpaper gallery. Any user who registers through the client login can view the library; the designated Firebase administrator is the only account allowed to upload, edit, delete, and manage albums.
 
 ## One-time secure setup
 
-1. In **Firebase Authentication**, enable **Email/Password** and create your account. Do not enable public registration in the app.
-2. Copy that account's UID into `firestore.rules`, then publish those rules in Firebase Console > Firestore Database > Rules.
+1. In **Firebase Authentication**, enable **Email/Password**. The client login provides account registration; keep the administrator account separate.
+2. Copy the administrator account's UID into `firestore.rules` and Vercel's `ADMIN_UID`, then publish the rules in Firebase Console > Firestore Database > Rules. This is required before client accounts can load the library.
 3. Copy `.env.example` into Vercel Project Settings > Environment Variables and fill in the real values. `CLOUDINARY_API_SECRET` must never appear in browser code.
 4. Redeploy Vercel. Sign in at the homepage or `/admin` using your Firebase email and password.
 

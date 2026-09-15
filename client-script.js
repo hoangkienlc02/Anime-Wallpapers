@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDocs, increment, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, doc, getDocs, increment, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db } from "./firebase-config.js";
 import { protectPage } from "./auth-gate.js";
 
@@ -8,10 +8,13 @@ let currentPage = 1;
 let sortMode = "featured";
 let activeDetailItem = null;
 let libraryCollections = [];
-let collectionTargetItem = null;
 const selectedImageIds = new Set();
 const advancedFilters = { device: "", media: "", orientation: "", resolution: "", theme: "", character: "", series: "", artist: "" };
 const itemsPerPage = 20;
+
+function isAdminSession() {
+    return document.getElementById("appShell")?.dataset.userRole === "admin";
+}
 
 const showToast = (message, type = "success") => {
     const toast = document.createElement("div");
@@ -112,6 +115,7 @@ function updateResultCount() {
 async function trackInteraction(item, field) {
     item[field] = (Number(item[field]) || 0) + 1;
     if (field === "downloads") localStorage.setItem(`anime-wallpaper-downloaded:${item.id}`, "true");
+    if (!isAdminSession()) return;
     try {
         await updateDoc(doc(db, "photos", item.id), { [field]: increment(1) });
     } catch (error) {
@@ -185,6 +189,7 @@ async function hydrateDetailTechnicalMetadata(item) {
     if (!Object.keys(updates).length) return;
     Object.assign(item, updates);
     if (activeDetailItem?.id === item.id) refreshDetailPanel();
+    if (!isAdminSession()) return;
     try {
         await updateDoc(doc(db, "photos", item.id), updates);
     } catch (error) {
@@ -221,6 +226,7 @@ async function toggleLike() {
     item.likes = Math.max(0, (Number(item.likes) || 0) + (liked ? -1 : 1));
     localStorage.setItem(`anime-wallpaper-liked:${item.id}`, String(!liked));
     refreshDetailPanel();
+    if (!isAdminSession()) return;
     try {
         await updateDoc(doc(db, "photos", item.id), { likes: increment(liked ? -1 : 1) });
     } catch (error) {
@@ -367,25 +373,6 @@ function renderGallery(data) {
 
 function renderFilterTags() {
     // Metadata is filtered through the compact advanced-filter panel.
-}
-
-function renderCollectionTags() {
-    const container = document.getElementById("collection-tags");
-    if (!container) return;
-    container.replaceChildren();
-    if (!libraryCollections.length) return;
-    const caption = document.createElement("span");
-    caption.className = "filter-caption";
-    caption.textContent = "BỘ SƯU TẬP";
-    container.appendChild(caption);
-    libraryCollections.forEach((collectionItem) => {
-        const button = document.createElement("button");
-        button.className = "tag-btn";
-        button.dataset.collectionId = collectionItem.id;
-        button.textContent = `${collectionItem.name} (${collectionItem.photoIds?.length || 0})`;
-        button.addEventListener("click", () => navigateTo(`/collection/${encodeURIComponent(collectionItem.id)}`));
-        container.appendChild(button);
-    });
 }
 
 function filterByTerm(term, source = allImages) {
@@ -643,100 +630,6 @@ function renderCollectionsPage() {
     });
 }
 
-function renderCollectionModal() {
-    const list = document.getElementById("collectionList");
-    const hasTarget = Boolean(collectionTargetItem);
-    document.getElementById("collectionModalTitle").textContent = hasTarget ? "LƯU ẢNH VÀO BỘ SƯU TẬP" : "QUẢN LÝ BỘ SƯU TẬP";
-    document.getElementById("collectionModalHint").textContent = hasTarget
-        ? `Chọn các album muốn lưu “${collectionTargetItem.subName || collectionTargetItem.theme || "Wallpaper"}”.`
-        : "Tạo album mới để sắp xếp hình nền theo ý bạn.";
-    document.getElementById("saveCollections").hidden = !hasTarget;
-    list.replaceChildren();
-    if (!libraryCollections.length) {
-        const empty = document.createElement("p");
-        empty.className = "collection-empty";
-        empty.textContent = "Chưa có album nào. Hãy tạo album đầu tiên ở trên.";
-        list.appendChild(empty);
-        return;
-    }
-    libraryCollections.forEach((collectionItem) => {
-        const row = document.createElement("label");
-        row.className = "collection-row";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = collectionItem.id;
-        checkbox.checked = Boolean(collectionTargetItem && collectionItem.photoIds?.includes(collectionTargetItem.id));
-        checkbox.disabled = !hasTarget;
-        const name = document.createElement("span");
-        name.textContent = collectionItem.name;
-        const total = document.createElement("small");
-        total.textContent = `${collectionItem.photoIds?.length || 0} ảnh`;
-        row.append(checkbox, name, total);
-        list.appendChild(row);
-    });
-}
-
-window.openCollectionModal = (item = null) => {
-    collectionTargetItem = item;
-    renderCollectionModal();
-    document.getElementById("collectionModal").style.display = "flex";
-    document.getElementById("newCollectionName").focus();
-};
-
-window.closeCollectionModal = () => {
-    document.getElementById("collectionModal").style.display = "none";
-    collectionTargetItem = null;
-};
-
-async function createCollection(event) {
-    event.preventDefault();
-    const input = document.getElementById("newCollectionName");
-    const name = input.value.trim();
-    if (!name) return;
-    if (libraryCollections.some((item) => normalize(item.name) === normalize(name))) {
-        showToast("Album này đã tồn tại.", "error");
-        return;
-    }
-    try {
-        const photoIds = collectionTargetItem ? [collectionTargetItem.id] : [];
-        const reference = await addDoc(collection(db, "collections"), { name, photoIds });
-        libraryCollections.push({ id: reference.id, name, photoIds });
-        libraryCollections.sort((first, second) => first.name.localeCompare(second.name, "vi"));
-        input.value = "";
-        renderCollectionModal();
-        renderCollectionTags();
-        showToast(`Đã tạo album “${name}”.`);
-    } catch (error) {
-        console.error(error);
-        showToast("Không thể tạo album. Hãy publish Firestore Rules mới.", "error");
-    }
-}
-
-async function saveCollectionMembership() {
-    if (!collectionTargetItem) return;
-    const selectedIds = new Set([...document.querySelectorAll("#collectionList input:checked")].map((input) => input.value));
-    const changedCollections = libraryCollections.filter((collectionItem) => {
-        const currentlyIncluded = collectionItem.photoIds?.includes(collectionTargetItem.id);
-        return currentlyIncluded !== selectedIds.has(collectionItem.id);
-    });
-    try {
-        await Promise.all(changedCollections.map(async (collectionItem) => {
-            const photoIds = collectionItem.photoIds || [];
-            const shouldInclude = selectedIds.has(collectionItem.id);
-            const updatedPhotoIds = shouldInclude ? [...new Set([...photoIds, collectionTargetItem.id])] : photoIds.filter((id) => id !== collectionTargetItem.id);
-            await updateDoc(doc(db, "collections", collectionItem.id), { photoIds: updatedPhotoIds });
-            collectionItem.photoIds = updatedPhotoIds;
-        }));
-        renderCollectionTags();
-        if (location.pathname.startsWith("/collection/")) renderRoute();
-        window.closeCollectionModal();
-        showToast("Đã cập nhật bộ sưu tập.");
-    } catch (error) {
-        console.error(error);
-        showToast("Không thể lưu album. Hãy publish Firestore Rules mới.", "error");
-    }
-}
-
 function safeFilename(item, index) {
     const extension = isVideo(item) ? ".mp4" : ".jpg";
     const base = String(item.subName || item.seriesName || item.theme || `wallpaper-${index + 1}`)
@@ -817,7 +710,6 @@ window.addEventListener("scroll", () => { backToTop.style.display = window.scrol
 backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
-    if (event.key === "Escape" && document.getElementById("collectionModal").style.display === "flex") return window.closeCollectionModal();
     if (event.key === "Escape" && activeDetailItem) return window.closeMediaDetails();
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
     if (event.key === "ArrowLeft") goToPage(currentPage - 1);
@@ -834,7 +726,8 @@ document.getElementById("detailClose").addEventListener("click", window.closeMed
 document.getElementById("detailDownload").addEventListener("click", () => {
     if (!activeDetailItem) return;
     trackInteraction(activeDetailItem, "downloads");
-    window.downloadImage(activeDetailItem.url, `${activeDetailItem.subName || activeDetailItem.theme || "anime"}.jpg`);
+    const extension = isVideo(activeDetailItem) ? ".mp4" : ".jpg";
+    window.downloadImage(activeDetailItem.url, `${activeDetailItem.subName || activeDetailItem.theme || "anime"}${extension}`);
     refreshDetailPanel();
 });
 document.getElementById("detailShare").addEventListener("click", async () => {
@@ -872,9 +765,6 @@ document.getElementById("clearAdvancedFilters").addEventListener("click", () => 
     syncAdvancedFilterControls();
     renderRoute();
 });
-document.getElementById("collectionClose").addEventListener("click", window.closeCollectionModal);
-document.getElementById("newCollectionForm").addEventListener("submit", createCollection);
-document.getElementById("saveCollections").addEventListener("click", saveCollectionMembership);
 document.getElementById("downloadSelection").addEventListener("click", downloadSelectedAsZip);
 document.getElementById("clearSelection").addEventListener("click", () => {
     selectedImageIds.clear();

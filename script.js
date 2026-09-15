@@ -697,12 +697,26 @@ async function removeOne(item) {
     if (!item.publicId) throw new Error("Bản ghi cũ thiếu publicId; không thể xác nhận xóa file Cloudinary.");
     await secureApi("/api/delete-media", { publicId: item.publicId, resourceType: isVideo(item) ? "video" : "image" });
     await deleteDoc(doc(db, "photos", item.id));
+
+    // Keep collection documents tidy: a deleted photo must not remain as a stale ID in albums.
+    const affectedCollections = adminCollections.filter((collectionItem) => collectionItem.photoIds?.includes(item.id));
+    try {
+        await Promise.all(affectedCollections.map(async (collectionItem) => {
+            const photoIds = collectionItem.photoIds.filter((photoId) => photoId !== item.id);
+            await updateDoc(doc(db, "collections", collectionItem.id), { photoIds });
+            collectionItem.photoIds = photoIds;
+        }));
+    } catch (error) {
+        // The photo has already been deleted; retain a clear warning rather than reporting a false deletion failure.
+        console.warn("Không thể dọn ID ảnh khỏi một số album:", error);
+    }
 }
 
 window.deletePhoto = async (item) => {
     if (!confirm("Xóa vĩnh viễn file khỏi Cloudinary và thư viện?")) return;
     try {
         await removeOne(item);
+        renderAdminCollections();
         showToast("Đã xóa file và bản ghi.");
         await loadImages();
     } catch (error) {
