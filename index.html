@@ -18,6 +18,7 @@
             <div class="auth-mode-toggle" role="tablist" aria-label="Chọn đăng nhập hoặc đăng ký"><button class="active" type="button" data-auth-mode="login">ĐĂNG NHẬP</button><button type="button" data-auth-mode="register">ĐĂNG KÝ</button></div>
             <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
             <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" minlength="6" required></label>
+            <label id="confirmPasswordField" hidden>Nhập lại mật khẩu <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6"></label>
             <p id="loginError" class="login-error" aria-live="polite"></p>
             <button id="authSubmitButton" class="btn-primary" type="submit">MỞ KHO LƯU TRỮ <span class="material-icons-outlined">arrow_forward</span></button>
             <p class="auth-switch">Chưa có tài khoản? <button id="authSwitchButton" type="button">ĐĂNG KÝ NGAY</button></p>
