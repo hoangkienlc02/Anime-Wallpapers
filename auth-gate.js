@@ -15,8 +15,6 @@ export function protectPage(onReady) {
     const form = document.getElementById("loginForm");
     const emailInput = document.getElementById("loginEmail");
     const passwordInput = document.getElementById("loginPassword");
-    const confirmPasswordInput = document.getElementById("confirmPassword");
-    const confirmPasswordField = document.getElementById("confirmPasswordField");
     const submitButton = document.getElementById("authSubmitButton");
     const intro = document.getElementById("authIntro");
     const modeButtons = [...document.querySelectorAll("[data-auth-mode]")];
@@ -32,8 +30,6 @@ export function protectPage(onReady) {
         if (mode === "register" && !registrationAllowed) return;
         authMode = mode;
         const registering = mode === "register";
-        confirmPasswordField.hidden = !registering;
-        confirmPasswordInput.required = registering;
         passwordInput.autocomplete = registering ? "new-password" : "current-password";
         intro.textContent = registering
             ? "Tạo tài khoản để lưu bộ sưu tập và mở kho hình nền của bạn."
@@ -72,15 +68,10 @@ export function protectPage(onReady) {
         event.preventDefault();
         error.textContent = "";
         try {
-            if (authMode === "register" && passwordInput.value !== confirmPasswordInput.value) {
-                error.textContent = "Mật khẩu nhập lại chưa khớp.";
-                return;
-            }
             const credential = authMode === "register"
                 ? await createUserWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value)
                 : await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
             passwordInput.value = "";
-            if (confirmPasswordInput) confirmPasswordInput.value = "";
             // Reveal immediately; onAuthStateChanged below also handles restored sessions.
             await revealApp(credential.user);
         } catch (err) {
