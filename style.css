@@ -119,6 +119,7 @@ button { color: inherit; }
 .selection-toolbar .btn-primary { width: auto; min-height: 42px; }
 .selection-toolbar .btn-primary:disabled { opacity: .42; }
 .selection-count { margin-left: auto; color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .85rem; font-weight: 700; letter-spacing: .08em; }
+.selection-toolbar .selection-count:first-child { margin-left: 0; }
 .selection-download { min-width: 130px; }
 .result-count { margin: 8px 0 0; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 1.15rem; font-weight: 700; letter-spacing: .06em; }
 .sort-tabs { display: flex; align-items: center; align-self: stretch; gap: clamp(14px, 2.6vw, 36px); }

@@ -106,11 +106,12 @@ function applySort(items) {
 
 function updateResultCount() {
     const resultCount = document.getElementById("galleryResultCount");
-    if (resultCount) resultCount.textContent = `${filteredImages.length} KẾT QUẢ`;
+    if (resultCount) resultCount.textContent = `${filteredImages.length} ẢNH`;
 }
 
 async function trackInteraction(item, field) {
     item[field] = (Number(item[field]) || 0) + 1;
+    if (field === "downloads") localStorage.setItem(`anime-wallpaper-downloaded:${item.id}`, "true");
     try {
         await updateDoc(doc(db, "photos", item.id), { [field]: increment(1) });
     } catch (error) {
@@ -128,6 +129,10 @@ function formatBytes(bytes) {
 
 function isLiked(item) {
     return localStorage.getItem(`anime-wallpaper-liked:${item.id}`) === "true";
+}
+
+function isDownloaded(item) {
+    return localStorage.getItem(`anime-wallpaper-downloaded:${item.id}`) === "true";
 }
 
 function refreshDetailPanel() {
@@ -354,39 +359,12 @@ function renderGallery(data) {
 }
 
 function renderFilterTags() {
-    const container = document.getElementById("dynamic-tags");
-    container.replaceChildren();
-    const groups = [
-        { field: "theme", label: "CHỦ ĐỀ" },
-        { field: "subName", label: "NHÂN VẬT" },
-        { field: "seriesName", label: "GAME / ANIME" },
-        { field: "artistName", label: "ARTIST" }
-    ];
-    groups.forEach(({ field, label }) => {
-        const values = new Map();
-        allImages.forEach((item) => {
-            const value = String(item[field] || "").trim();
-            if (value) values.set(value, (values.get(value) || 0) + 1);
-        });
-        [...values.entries()].sort(([first], [second]) => first.localeCompare(second, "vi")).forEach(([value, count]) => {
-            const tag = `${field.toLowerCase()}:${normalize(value)}`;
-            const button = document.createElement("button");
-            button.className = "tag-btn metadata-tag";
-            button.dataset.tag = tag;
-            button.append(document.createTextNode(`${label} · ${value} `));
-            const countNode = document.createElement("span");
-            countNode.className = "tag-count";
-            countNode.textContent = count;
-            button.appendChild(countNode);
-            button.addEventListener("click", () => window.filterByDynamicTag(tag));
-            container.appendChild(button);
-        });
-    });
-    renderCollectionTags();
+    // Metadata is filtered through the compact advanced-filter panel.
 }
 
 function renderCollectionTags() {
     const container = document.getElementById("collection-tags");
+    if (!container) return;
     container.replaceChildren();
     if (!libraryCollections.length) return;
     const caption = document.createElement("span");
@@ -459,6 +437,10 @@ function syncRouteControls(path, tag = "") {
 
 function renderRoute() {
     const path = decodeURIComponent(location.pathname.replace(/\/+$/, "")) || "/";
+    if (path.startsWith("/collection/")) {
+        history.replaceState({}, "", "/wallpapers");
+        return renderRoute();
+    }
     const queryText = new URLSearchParams(location.search).get("q")?.trim().toLowerCase() || "";
     const searchInput = document.getElementById("searchInput");
     let data = [...allImages];
@@ -469,11 +451,9 @@ function renderRoute() {
     else if (path === "/favorites") {
         activeTag = "favorites";
         data = data.filter((item) => item.favorite);
-    } else if (path.startsWith("/collection/")) {
-        const collectionId = path.slice("/collection/".length);
-        const collectionItem = libraryCollections.find((item) => item.id === collectionId);
-        activeTag = "";
-        data = collectionItem ? data.filter((item) => collectionItem.photoIds?.includes(item.id)) : [];
+    } else if (path === "/downloads") {
+        activeTag = "downloads";
+        data = data.filter((item) => isDownloaded(item));
     } else if (path.startsWith("/tag/")) {
         activeTag = path.slice("/tag/".length).toLowerCase();
         data = filterByTerm(activeTag);
@@ -502,6 +482,8 @@ window.filterByDynamicTag = (tag) => {
     const route = tag.toLowerCase() === "all" ? "/wallpapers" : `/tag/${encodeURIComponent(tag.toLowerCase())}`;
     navigateTo(route);
 };
+
+window.filterBySaved = (type) => navigateTo(type === "downloads" ? "/downloads" : "/favorites");
 
 window.filterByType = (type) => navigateTo(type === "video" ? "/videos" : "/images");
 
@@ -724,10 +706,7 @@ async function loadImages() {
     const gallery = document.getElementById("gallery");
     gallery.textContent = "Đang tải thư viện…";
     try {
-        const [snapshot] = await Promise.all([
-            getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
-            loadCollections()
-        ]);
+        const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         populateAdvancedFilters();
         syncAdvancedFilterControls();
@@ -766,9 +745,6 @@ document.getElementById("detailDownload").addEventListener("click", () => {
 });
 document.getElementById("detailLike").addEventListener("click", toggleLike);
 document.getElementById("detailFavorite").addEventListener("click", () => toggleFavorite());
-document.getElementById("detailCollection").addEventListener("click", () => {
-    if (activeDetailItem) window.openCollectionModal(activeDetailItem);
-});
 document.getElementById("detailOpenOriginal").addEventListener("click", () => {
     if (activeDetailItem) trackInteraction(activeDetailItem, "views");
 });
@@ -792,7 +768,6 @@ document.getElementById("clearAdvancedFilters").addEventListener("click", () => 
     syncAdvancedFilterControls();
     renderRoute();
 });
-document.getElementById("manageCollections").addEventListener("click", () => window.openCollectionModal());
 document.getElementById("collectionClose").addEventListener("click", window.closeCollectionModal);
 document.getElementById("newCollectionForm").addEventListener("submit", createCollection);
 document.getElementById("saveCollections").addEventListener("click", saveCollectionMembership);
