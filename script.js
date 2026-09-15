@@ -820,7 +820,7 @@ window.goToPage = function goToPage(page, { scroll = true } = {}) {
     renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
     updateAdminSelectionControls();
-    if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+    if (scroll) document.getElementById("adminArchive").scrollIntoView({ behavior: "smooth", block: "start" });
 };
 function renderPagination() {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
