@@ -134,7 +134,7 @@ button { color: inherit; }
 .card video { min-height: 210px; pointer-events: none; }
 .card-overlay { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: space-between; padding: 15px; opacity: 0; background: linear-gradient(180deg, rgba(1, 14, 15, .46), transparent 45%, rgba(1, 14, 15, .92)); transition: opacity .25s; }
 .card:hover .card-overlay, .card:focus-within .card-overlay { opacity: 1; }
-.selection-toggle { position: absolute; z-index: 4; top: 10px; left: 10px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid rgba(255, 255, 255, .55); color: #fff; background: rgba(4, 20, 21, .82); cursor: pointer; opacity: 0; transition: .2s; }
+.selection-toggle { position: absolute; z-index: 4; top: 10px; right: 10px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid rgba(255, 255, 255, .55); color: #fff; background: rgba(4, 20, 21, .82); cursor: pointer; opacity: 0; transition: .2s; }
 .card:hover .selection-toggle, .card:focus-within .selection-toggle, .selection-toggle.is-selected { opacity: 1; }
 .selection-toggle.is-selected { border-color: var(--accent); background: var(--accent); }
 .tag-label { display: inline-block; margin: 0 5px 5px 0; padding: 4px 7px; background: var(--accent); color: #fff; font-family: "Barlow Condensed", sans-serif; font-size: .73rem; font-weight: 700; letter-spacing: .07em; line-height: 1; }
