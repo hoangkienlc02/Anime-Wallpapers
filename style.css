@@ -86,9 +86,6 @@ button { color: inherit; }
 .hero-stat span, .section-index { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .9rem; letter-spacing: .11em; }
 .compact-hero { min-height: 245px; }
 .compact-hero h1 { font-size: clamp(4.5rem, 8vw, 8rem); }
-.admin-shell .compact-hero { min-height: 174px; align-items: center; padding: 24px 0; }
-.admin-shell .compact-hero h1 { font-size: clamp(3.9rem, 6.4vw, 6.7rem); }
-.admin-shell .compact-hero .hero-stat { padding: 11px 0; }
 .admin-quick-nav { position: sticky; z-index: 99; top: 93px; display: flex; align-items: center; gap: 7px; padding: 9px clamp(22px, 4vw, 52px); overflow-x: auto; border-bottom: 1px solid var(--line); background: rgba(5, 29, 31, .96); backdrop-filter: blur(18px); }
 .admin-quick-nav a { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 34px; padding: 0 11px; border: 1px solid var(--line); color: var(--muted); text-decoration: none; font-family: "Barlow Condensed", sans-serif; font-size: .82rem; font-weight: 700; letter-spacing: .07em; transition: .2s; }
 .admin-quick-nav a:hover, .admin-quick-nav a:focus { border-color: var(--accent); color: #fff; background: var(--accent); outline: 0; }
