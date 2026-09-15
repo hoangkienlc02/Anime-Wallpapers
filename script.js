@@ -9,6 +9,7 @@ let selectedFiles = [];
 let metadataDrafts = [];
 let selectedPreviewIndex = 0;
 let activeDetailItem = null;
+const selectedAdminIds = new Set();
 const itemsPerPage = 20;
 
 const showToast = (message, type = "success") => {
@@ -36,6 +37,35 @@ function formatBytes(bytes) {
     const units = ["B", "KB", "MB", "GB"];
     const unit = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
     return `${(value / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function isMissingMetadata(item) {
+    return !item.subName?.trim() || !item.seriesName?.trim() || !item.artistName?.trim();
+}
+
+function renderDashboard() {
+    const images = allImages.filter((item) => !isVideo(item));
+    const videos = allImages.length - images.length;
+    const totalSize = allImages.reduce((sum, item) => sum + (Number(item.fileSizeBytes) || 0), 0);
+    const top = (field) => [...allImages].sort((first, second) => (Number(second[field]) || 0) - (Number(first[field]) || 0))[0];
+    const describeTop = (field, label) => {
+        const item = top(field);
+        return item && Number(item[field]) ? `${label}: ${item.subName || item.seriesName || item.theme || "Không tên"} (${item[field]})` : `${label}: —`;
+    };
+    document.getElementById("statTotal").textContent = allImages.length;
+    document.getElementById("statMedia").textContent = `${images.length} ảnh · ${videos} video`;
+    document.getElementById("statStorage").textContent = formatBytes(totalSize);
+    document.getElementById("statMissing").textContent = allImages.filter(isMissingMetadata).length;
+    document.getElementById("statTopViews").textContent = describeTop("views", "Xem");
+    document.getElementById("statTopDownloads").textContent = describeTop("downloads", "Tải");
+    document.getElementById("statTopLikes").textContent = describeTop("likes", "Thích");
+}
+
+function updateAdminSelectionControls() {
+    const count = selectedAdminIds.size;
+    document.getElementById("adminSelectionCount").textContent = count ? `${count} TỆP ĐÃ CHỌN` : "CHƯA CHỌN TỆP";
+    document.getElementById("bulkEditButton").disabled = count === 0;
+    document.getElementById("clearAdminSelection").hidden = count === 0;
 }
 
 function refreshDetailPanel() {
@@ -128,6 +158,12 @@ async function getFileTechnicalMetadata(file) {
     }
 }
 
+async function getFileHash(file) {
+    if (!globalThis.crypto?.subtle) throw new Error("Trình duyệt không hỗ trợ kiểm tra tệp trùng. Hãy dùng Chrome/Edge bản mới.");
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 async function uploadOneFile(file, metadata) {
     const resourceType = file.type.startsWith("video/") ? "video" : "image";
     const signature = await secureApi("/api/upload-signature", { resourceType });
@@ -191,6 +227,8 @@ window.handleUpload = async () => {
 
     const maxSize = 100 * 1024 * 1024;
     const uploadQueue = [];
+    const queuedHashes = new Set();
+    const duplicateFiles = [];
     for (const [index, file] of files.entries()) {
         const validFile = /^(image|video)\//.test(file.type) && file.size <= maxSize;
         if (!validFile) {
@@ -202,9 +240,24 @@ window.handleUpload = async () => {
             showToast(`Hãy nhập Thiết bị và Chủ đề cho tệp ${index + 1}: ${file.name}`, "error");
             return;
         }
-        uploadQueue.push({ file, metadata });
+        let fileHash;
+        try {
+            fileHash = await getFileHash(file);
+        } catch (error) {
+            showToast(`${file.name}: ${error.message}`, "error");
+            return;
+        }
+        if (queuedHashes.has(fileHash) || allImages.some((item) => item.fileHash === fileHash)) {
+            duplicateFiles.push(file.name);
+            continue;
+        }
+        queuedHashes.add(fileHash);
+        uploadQueue.push({ file, metadata: { ...metadata, fileHash } });
     }
-    if (!uploadQueue.length) return;
+    if (!uploadQueue.length) {
+        showToast(`Không có tệp mới để tải. ${duplicateFiles.length} tệp đã có trong archive.`, "error");
+        return;
+    }
 
     const uploadButton = document.getElementById("uploadButton");
     uploadButton.disabled = true;
@@ -232,6 +285,7 @@ window.handleUpload = async () => {
             const firstFailure = failures[0];
             showToast(`${failed}/${uploadQueue.length} tệp không tải được. ${firstFailure.message}`, "error");
         }
+        if (duplicateFiles.length) showToast(`Đã bỏ qua ${duplicateFiles.length} tệp trùng: ${duplicateFiles[0]}`, "error");
         await loadImages();
     } catch (error) {
         console.error(error);
@@ -291,6 +345,21 @@ function renderGallery(data) {
             media.alt = item.subName || item.theme || "Anime wallpaper";
         }
         card.appendChild(media);
+
+        const selectButton = document.createElement("button");
+        selectButton.type = "button";
+        selectButton.className = "selection-toggle";
+        selectButton.title = selectedAdminIds.has(item.id) ? "Bỏ chọn tệp" : "Chọn để sửa hàng loạt";
+        selectButton.setAttribute("aria-label", selectButton.title);
+        selectButton.classList.toggle("is-selected", selectedAdminIds.has(item.id));
+        selectButton.innerHTML = `<span class="material-icons-outlined">${selectedAdminIds.has(item.id) ? "check_box" : "check_box_outline_blank"}</span>`;
+        selectButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (selectedAdminIds.has(item.id)) selectedAdminIds.delete(item.id);
+            else selectedAdminIds.add(item.id);
+            goToPage(currentPage, { scroll: false });
+        });
+        card.appendChild(selectButton);
 
         const overlay = document.createElement("div");
         overlay.className = "card-overlay";
@@ -424,11 +493,52 @@ window.filterByType = (type, button) => {
     filteredImages = allImages.filter((item) => isVideo(item) === (type === "video"));
     goToPage(1, { scroll: false });
 };
+window.filterMissingMetadata = (button) => {
+    document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
+    button?.classList.add("active");
+    filteredImages = allImages.filter(isMissingMetadata);
+    goToPage(1, { scroll: false });
+};
 window.filterImages = () => {
     const term = document.getElementById("searchInput").value.trim().toLowerCase();
     filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName, item.seriesName, item.artistName].some((value) => value?.toLowerCase().includes(term)));
     goToPage(1, { scroll: false });
 };
+
+function openBulkEditModal() {
+    if (!selectedAdminIds.size) return;
+    document.getElementById("bulkEditHint").textContent = `Áp dụng cho ${selectedAdminIds.size} tệp. Chỉ các ô có nhập dữ liệu mới thay đổi.`;
+    ["bulkDeviceInput", "bulkThemeInput", "bulkNameInput", "bulkSeriesInput", "bulkArtistInput"].forEach((id) => { document.getElementById(id).value = ""; });
+    document.getElementById("bulkEditModal").style.display = "flex";
+}
+
+async function saveBulkEdit() {
+    const fieldMap = {
+        device: "bulkDeviceInput", theme: "bulkThemeInput", subName: "bulkNameInput",
+        seriesName: "bulkSeriesInput", artistName: "bulkArtistInput"
+    };
+    const updates = Object.fromEntries(Object.entries(fieldMap)
+        .map(([field, id]) => [field, document.getElementById(id).value.trim()])
+        .filter(([, value]) => value));
+    if (!Object.keys(updates).length) return showToast("Hãy nhập ít nhất một trường để cập nhật.", "error");
+    const targets = allImages.filter((item) => selectedAdminIds.has(item.id));
+    const saveButton = document.getElementById("bulkEditSave");
+    saveButton.disabled = true;
+    try {
+        for (const item of targets) {
+            await updateDoc(doc(db, "photos", item.id), updates);
+        }
+        selectedAdminIds.clear();
+        document.getElementById("bulkEditModal").style.display = "none";
+        showToast(`Đã cập nhật ${targets.length} tệp.`);
+        await loadImages();
+    } catch (error) {
+        console.error(error);
+        showToast("Không thể sửa hàng loạt. Hãy kiểm tra Firebase Rules.", "error");
+    } finally {
+        saveButton.disabled = false;
+    }
+}
 
 window.goToPage = function goToPage(page, { scroll = true } = {}) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
@@ -436,6 +546,7 @@ window.goToPage = function goToPage(page, { scroll = true } = {}) {
     currentPage = page;
     renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
+    updateAdminSelectionControls();
     if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
 };
 function renderPagination() {
@@ -473,6 +584,7 @@ async function loadImages() {
         const snapshot = await getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")));
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         filteredImages = [...allImages];
+        renderDashboard();
         renderFilterTags();
         goToPage(1, { scroll: false });
     } catch (error) {
@@ -660,8 +772,35 @@ document.getElementById("imageInput").addEventListener("change", (event) => {
     refreshUploadSelection();
 });
 
+document.getElementById("missingMetadataFilter").addEventListener("click", (event) => window.filterMissingMetadata(event.currentTarget));
+document.getElementById("selectFilteredButton").addEventListener("click", () => {
+    filteredImages.forEach((item) => selectedAdminIds.add(item.id));
+    goToPage(currentPage, { scroll: false });
+});
+document.getElementById("clearAdminSelection").addEventListener("click", () => {
+    selectedAdminIds.clear();
+    goToPage(currentPage, { scroll: false });
+});
+document.getElementById("bulkEditButton").addEventListener("click", openBulkEditModal);
+document.getElementById("bulkEditCancel").addEventListener("click", () => { document.getElementById("bulkEditModal").style.display = "none"; });
+document.getElementById("bulkEditSave").addEventListener("click", saveBulkEdit);
+document.getElementById("importMetadataButton").addEventListener("click", () => document.getElementById("metadataImportInput").click());
+document.getElementById("metadataImportInput").addEventListener("change", async (event) => {
+    const [file] = event.target.files;
+    if (file) await restoreMetadataFile(file);
+    event.target.value = "";
+});
+
 window.exportMetadata = () => {
-    const blob = new Blob([JSON.stringify(allImages, null, 2)], { type: "application/json" });
+    const metadataFields = ["id", "publicId", "type", "device", "theme", "subName", "seriesName", "artistName", "favorite", "views", "downloads", "likes", "width", "height", "fileSizeBytes", "fileHash"];
+    const backup = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        photos: allImages.map((item) => Object.fromEntries(metadataFields
+            .filter((field) => Object.prototype.hasOwnProperty.call(item, field))
+            .map((field) => [field, item[field]])))
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -670,6 +809,48 @@ window.exportMetadata = () => {
     URL.revokeObjectURL(url);
     showToast("Đã xuất metadata. Hãy sao lưu file này cùng các file gốc.");
 };
+
+async function restoreMetadataFile(file) {
+    let backup;
+    try {
+        backup = JSON.parse(await file.text());
+    } catch {
+        showToast("File JSON không hợp lệ.", "error");
+        return;
+    }
+    const records = Array.isArray(backup) ? backup : backup.photos;
+    if (!Array.isArray(records)) {
+        showToast("File sao lưu không có danh sách photos hợp lệ.", "error");
+        return;
+    }
+    if (!confirm(`Khôi phục metadata cho các tệp khớp trong archive? File này có ${records.length} bản ghi. Ảnh trên Cloudinary sẽ không bị thay đổi.`)) return;
+    const restorableFields = ["device", "theme", "subName", "seriesName", "artistName", "favorite", "views", "downloads", "likes", "width", "height", "fileSizeBytes", "fileHash"];
+    let restored = 0;
+    let skipped = 0;
+    try {
+        for (const record of records) {
+            const target = allImages.find((item) => item.id === record.id || (record.publicId && item.publicId === record.publicId));
+            if (!target) {
+                skipped += 1;
+                continue;
+            }
+            const updates = Object.fromEntries(restorableFields
+                .filter((field) => Object.prototype.hasOwnProperty.call(record, field))
+                .map((field) => [field, record[field]]));
+            if (!Object.keys(updates).length) {
+                skipped += 1;
+                continue;
+            }
+            await updateDoc(doc(db, "photos", target.id), updates);
+            restored += 1;
+        }
+        showToast(`Đã khôi phục metadata cho ${restored} tệp${skipped ? `, bỏ qua ${skipped} tệp không khớp` : ""}.`);
+        await loadImages();
+    } catch (error) {
+        console.error(error);
+        showToast("Khôi phục bị dừng vì Firebase từ chối cập nhật.", "error");
+    }
+}
 
 const backToTop = document.getElementById("backToTop");
 window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });

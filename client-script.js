@@ -199,6 +199,15 @@ window.openMediaDetails = (item) => {
 window.closeMediaDetails = () => {
     document.getElementById("lightbox").style.display = "none";
     activeDetailItem = null;
+    if (location.pathname.startsWith("/wallpaper/")) {
+        history.pushState({}, "", "/wallpapers");
+        renderRoute();
+    }
+};
+
+window.openWallpaperPage = (item) => {
+    history.pushState({}, "", `/wallpaper/${encodeURIComponent(item.id)}`);
+    window.openMediaDetails(item);
 };
 
 async function toggleLike() {
@@ -352,7 +361,7 @@ function renderGallery(data) {
         card.addEventListener("click", () => {
             trackInteraction(item, "views");
             if (video) window.open(item.url, "_blank", "noopener");
-            else window.openMediaDetails(item);
+            else window.openWallpaperPage(item);
         });
         gallery.appendChild(card);
     });
@@ -445,8 +454,20 @@ function renderRoute() {
     const searchInput = document.getElementById("searchInput");
     let data = [...allImages];
     let activeTag = "";
+    const detailId = path.startsWith("/wallpaper/") ? path.slice("/wallpaper/".length) : "";
+    const detailItem = detailId ? allImages.find((item) => item.id === detailId) : null;
 
-    if (path === "/images") data = data.filter((item) => !isVideo(item));
+    if (!detailId && activeDetailItem) {
+        document.getElementById("lightbox").style.display = "none";
+        activeDetailItem = null;
+    }
+
+    if (detailId && !detailItem) {
+        history.replaceState({}, "", "/wallpapers");
+        return renderRoute();
+    }
+    if (detailId) data = data.filter((item) => item.id === detailId);
+    else if (path === "/images") data = data.filter((item) => !isVideo(item));
     else if (path === "/videos") data = data.filter((item) => isVideo(item));
     else if (path === "/favorites") {
         activeTag = "favorites";
@@ -470,6 +491,7 @@ function renderRoute() {
     filteredImages = applySort(applyAdvancedFilters(data));
     syncRouteControls(path, activeTag || (path === "/" || path === "/wallpapers" ? "all" : ""));
     goToPage(1, { scroll: false });
+    if (detailItem && !isVideo(detailItem)) window.openMediaDetails(detailItem);
 }
 
 function navigateTo(path, { replace = false } = {}) {
@@ -742,6 +764,16 @@ document.getElementById("detailDownload").addEventListener("click", () => {
     trackInteraction(activeDetailItem, "downloads");
     window.downloadImage(activeDetailItem.url, `${activeDetailItem.subName || activeDetailItem.theme || "anime"}.jpg`);
     refreshDetailPanel();
+});
+document.getElementById("detailShare").addEventListener("click", async () => {
+    if (!activeDetailItem) return;
+    const shareUrl = `${location.origin}/wallpaper/${encodeURIComponent(activeDetailItem.id)}`;
+    try {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("Đã sao chép link ảnh.");
+    } catch {
+        window.prompt("Sao chép link ảnh này:", shareUrl);
+    }
 });
 document.getElementById("detailLike").addEventListener("click", toggleLike);
 document.getElementById("detailFavorite").addEventListener("click", () => toggleFavorite());
