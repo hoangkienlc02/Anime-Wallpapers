@@ -6,5 +6,11 @@ service cloud.firestore {
       allow read, create, update, delete: if request.auth != null
         && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
     }
+
+    match /collections/{collectionId} {
+      // Private albums for the same gallery owner.
+      allow read, create, update, delete: if request.auth != null
+        && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
+    }
   }
 }
