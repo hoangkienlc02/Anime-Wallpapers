@@ -88,6 +88,10 @@ export function protectPage(onReady) {
         if (registrationInFlight) return;
         await reload(user);
         if (!user.emailVerified) return showUnverifiedAccount(user);
+        // Firestore Rules reads email_verified from the ID token, not the
+        // refreshed User profile. Force a new token after verification so a
+        // previously unverified account can load the library immediately.
+        await user.getIdToken(true);
         if (!registrationAllowed && user.uid !== OWNER_UID) {
             setError("Tài khoản này không có quyền truy cập khu vực Quản trị.");
             try { await signOut(auth); } finally { finishSessionCheck(); }
@@ -187,5 +191,5 @@ export function protectPage(onReady) {
 export async function getIdToken() {
     const user = auth.currentUser;
     if (!user || !user.emailVerified) throw new Error("Bạn cần xác minh email trước.");
-    return user.getIdToken();
+    return user.getIdToken(true);
 }
