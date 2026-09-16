@@ -166,6 +166,10 @@ export function protectPage(onReady) {
             if (err.code === "account-blocked") {
                 await signOut(auth);
                 setError("Tài khoản này đã bị quản trị viên chặn.");
+            } else if (err.code === "permission-denied") {
+                setError("Firebase đang chặn hồ sơ tài khoản. Hãy Publish file firestore.rules mới trong Firebase Console rồi tải lại trang.");
+            } else if (err.code === "unavailable") {
+                setError("Không thể kết nối Firestore. Hãy kiểm tra mạng rồi thử lại.");
             } else {
                 setError("Không thể xác minh phiên đăng nhập. Hãy đăng xuất rồi thử lại.");
             }
