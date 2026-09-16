@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { auth, db } from "./firebase-config.js";
 import { protectPage } from "./auth-gate.js";
@@ -6,13 +6,19 @@ import { protectPage } from "./auth-gate.js";
 let allImages = [];
 let filteredImages = [];
 let currentPage = 1;
-let sortMode = "featured";
+let sortMode = "newest";
 let activeDetailItem = null;
 let lastDetailTrigger = null;
 let libraryCollections = [];
 let unsubscribePhotos = null;
 let activeLibraryUserUid = null;
 let initialSnapshotTimer = null;
+let browseCursor = null;
+let browseHasMore = false;
+let browseFirstPageReady = false;
+let fullLibraryLoaded = false;
+let fullLibraryLoad = null;
+let pendingDetailId = "";
 const cloudFavoriteIds = new Set();
 const cloudDownloadIds = new Set();
 const cloudLikeIds = new Set();
@@ -53,6 +59,12 @@ function clearLibrarySessionState() {
     filteredImages = [];
     currentPage = 1;
     paginationLoading = false;
+    browseCursor = null;
+    browseHasMore = false;
+    browseFirstPageReady = false;
+    fullLibraryLoaded = false;
+    fullLibraryLoad = null;
+    pendingDetailId = "";
     libraryCollections = [];
     cloudFavoriteIds.clear();
     cloudDownloadIds.clear();
@@ -167,9 +179,36 @@ function applySort(items) {
     });
 }
 
+function currentPath() {
+    return decodeURIComponent(location.pathname.replace(/\/+$/, "")) || "/";
+}
+
+function hasAdvancedFilters() {
+    return Object.values(advancedFilters).some(Boolean);
+}
+
+function usesCursorPagination(path = currentPath()) {
+    const search = new URLSearchParams(location.search).get("q")?.trim();
+    return !fullLibraryLoaded
+        && !search
+        && !hasAdvancedFilters()
+        && sortMode === "newest"
+        && (path === "/" || path === "/wallpapers");
+}
+
+function routeNeedsCompleteLibrary(path, search = "") {
+    if (search || hasAdvancedFilters()) return true;
+    if (path === "/account" || path.startsWith("/wallpaper/")) return false;
+    return path !== "/" && path !== "/wallpapers";
+}
+
 function updateResultCount() {
     const resultCount = document.getElementById("galleryResultCount");
     if (!resultCount) return;
+    if (usesCursorPagination()) {
+        resultCount.textContent = `TRANG ${currentPage} · TẢI THEO LÔ ${itemsPerPage} ẢNH`;
+        return;
+    }
     const videos = filteredImages.filter(isVideo).length;
     const images = filteredImages.length - videos;
     resultCount.textContent = videos ? `${filteredImages.length} NỘI DUNG · ${images} ẢNH · ${videos} VIDEO` : `${images} ẢNH`;
@@ -516,6 +555,29 @@ function renderGallery(data) {
 function renderFilterTags() {
     const container = document.getElementById("dynamic-tags");
     if (!container) return;
+    if (!fullLibraryLoaded) {
+        container.hidden = false;
+        container.replaceChildren();
+        const loadButton = document.createElement("button");
+        loadButton.type = "button";
+        loadButton.className = "tag-btn";
+        loadButton.textContent = "LỌC THEO GAME / ANIME";
+        loadButton.addEventListener("click", async () => {
+            loadButton.disabled = true;
+            try {
+                await ensureCompleteLibrary();
+                renderFilterTags();
+                renderRoute({ preservePage: true });
+                showToast("Đã tải danh sách game / anime để lọc.");
+            } catch (error) {
+                console.error("Không thể tải danh sách tag:", error);
+                showToast("Không thể tải bộ lọc. Hãy thử lại.", "error");
+                loadButton.disabled = false;
+            }
+        });
+        container.appendChild(loadButton);
+        return;
+    }
     const counts = new Map();
     allImages.forEach((item) => {
         const series = String(item.seriesName || "").trim();
@@ -598,9 +660,82 @@ function syncRouteControls(path, tag = "") {
     if (collectionId) document.querySelectorAll(`[data-collection-id="${CSS.escape(collectionId)}"]`).forEach((element) => element.classList.add("active"));
 }
 
+function mergeLatestBrowsePage(items, snapshot) {
+    const ids = new Set(items.map((item) => item.id));
+    allImages = [...items, ...allImages.filter((item) => !ids.has(item.id))];
+    if (!fullLibraryLoaded) {
+        if (!browseFirstPageReady) {
+            browseCursor = snapshot.docs.at(-1) || null;
+            browseHasMore = snapshot.size === itemsPerPage;
+            browseFirstPageReady = true;
+        }
+    }
+}
+
+async function loadNextBrowsePage() {
+    if (!browseHasMore || !browseCursor || fullLibraryLoaded) return false;
+    const uid = activeLibraryUserUid;
+    const snapshot = await getDocs(query(
+        collection(db, "photos"),
+        orderBy("createdAt", "desc"),
+        startAfter(browseCursor),
+        limit(itemsPerPage)
+    ));
+    if (uid !== activeLibraryUserUid) return false;
+    const ids = new Set(allImages.map((item) => item.id));
+    allImages.push(...snapshot.docs
+        .map((document) => ({ id: document.id, ...document.data() }))
+        .filter((item) => !ids.has(item.id)));
+    browseCursor = snapshot.docs.at(-1) || browseCursor;
+    browseHasMore = snapshot.size === itemsPerPage;
+    return !snapshot.empty;
+}
+
+async function ensureBrowsePage(page) {
+    while (allImages.length < page * itemsPerPage && browseHasMore) {
+        const loaded = await loadNextBrowsePage();
+        if (!loaded) break;
+    }
+}
+
+async function ensureCompleteLibrary() {
+    if (fullLibraryLoaded) return allImages;
+    if (fullLibraryLoad) return fullLibraryLoad;
+    const uid = activeLibraryUserUid;
+    fullLibraryLoad = getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc")))
+        .then((snapshot) => {
+            if (uid !== activeLibraryUserUid) return allImages;
+            allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+            fullLibraryLoaded = true;
+            browseCursor = null;
+            browseHasMore = false;
+            populateAdvancedFilters();
+            syncAdvancedFilterControls();
+            renderFilterTags();
+            return allImages;
+        })
+        .finally(() => { fullLibraryLoad = null; });
+    return fullLibraryLoad;
+}
+
+async function loadDetailFromRoute(detailId) {
+    if (pendingDetailId === detailId) return null;
+    pendingDetailId = detailId;
+    try {
+        const snapshot = await getDoc(doc(db, "photos", detailId));
+        if (!snapshot.exists() || currentPath() !== `/wallpaper/${detailId}`) return null;
+        const item = { id: snapshot.id, ...snapshot.data() };
+        if (!allImages.some((existing) => existing.id === item.id)) allImages.push(item);
+        return item;
+    } finally {
+        if (pendingDetailId === detailId) pendingDetailId = "";
+    }
+}
+
 function renderRoute(options = {}) {
     const preservePage = options?.preservePage === true;
     const path = decodeURIComponent(location.pathname.replace(/\/+$/, "")) || "/";
+    const queryText = new URLSearchParams(location.search).get("q")?.trim().toLowerCase() || "";
     const collectionView = document.getElementById("collectionView");
     const libraryGallery = document.getElementById("libraryGallery");
     const discoverPanel = document.querySelector(".discover-panel");
@@ -616,6 +751,13 @@ function renderRoute(options = {}) {
     }
     accountView.hidden = true;
     if (path === "/collections") {
+        if (!fullLibraryLoaded) {
+            ensureCompleteLibrary().then(() => renderRoute(options)).catch((error) => {
+                console.error("Không thể tải album:", error);
+                showToast("Không thể tải album. Hãy thử lại.", "error");
+            });
+            return;
+        }
         discoverPanel.hidden = true;
         libraryGallery.hidden = true;
         collectionView.hidden = false;
@@ -626,7 +768,14 @@ function renderRoute(options = {}) {
     discoverPanel.hidden = false;
     libraryGallery.hidden = false;
     collectionView.hidden = true;
-    const queryText = new URLSearchParams(location.search).get("q")?.trim().toLowerCase() || "";
+    if (!fullLibraryLoaded && routeNeedsCompleteLibrary(path, queryText)) {
+        renderGallerySkeleton();
+        ensureCompleteLibrary().then(() => renderRoute(options)).catch((error) => {
+            console.error("Không thể tải thư viện đầy đủ:", error);
+            document.getElementById("gallery").textContent = "Không thể tải thư viện. Hãy thử lại trang.";
+        });
+        return;
+    }
     const searchInput = document.getElementById("searchInput");
     let data = [...allImages];
     let activeTag = "";
@@ -639,8 +788,17 @@ function renderRoute(options = {}) {
     }
 
     if (detailId && !detailItem) {
-        history.replaceState({}, "", "/wallpapers");
-        return renderRoute();
+        loadDetailFromRoute(detailId).then((item) => {
+            if (item) return renderRoute({ preservePage: true });
+            if (currentPath() === `/wallpaper/${detailId}`) {
+                history.replaceState({}, "", "/wallpapers");
+                renderRoute();
+            }
+        }).catch((error) => {
+            console.error("Không thể tải chi tiết ảnh:", error);
+            document.getElementById("gallery").textContent = "Không thể tải chi tiết hình ảnh. Hãy thử lại.";
+        });
+        return;
     }
     if (detailId) data = data.filter((item) => item.id === detailId);
     else if (path === "/images") data = data.filter((item) => !isVideo(item));
@@ -675,7 +833,7 @@ function renderRoute(options = {}) {
     }
 
     searchInput.value = queryText;
-    filteredImages = applySort(applyAdvancedFilters(data));
+    filteredImages = usesCursorPagination(path) ? [...allImages] : applySort(applyAdvancedFilters(data));
     syncRouteControls(path, activeTag || (path === "/" || path === "/wallpapers" ? "all" : ""));
     goToPage(preservePage ? currentPage : 1, { scroll: false });
     if (detailItem && !isVideo(detailItem)) window.openMediaDetails(detailItem);
@@ -712,15 +870,60 @@ window.filterImages = () => {
     navigateTo(term ? `/search?q=${encodeURIComponent(term)}` : "/wallpapers", { replace: true });
 };
 
-window.sortGallery = (mode, button) => {
+window.sortGallery = async (mode, button) => {
     sortMode = mode;
     document.querySelectorAll(".sort-tab").forEach((tab) => tab.classList.remove("active"));
     button?.classList.add("active");
-    filteredImages = applySort(filteredImages);
-    goToPage(1, { scroll: false });
+    if (mode !== "newest" && !fullLibraryLoaded) {
+        renderGallerySkeleton();
+        try {
+            await ensureCompleteLibrary();
+            renderRoute({ preservePage: true });
+        } catch (error) {
+            console.error("Không thể sắp xếp toàn bộ thư viện:", error);
+            showToast("Không thể tải thư viện để sắp xếp.", "error");
+            return;
+        }
+    }
+    renderRoute();
 };
 
 window.goToPage = async function goToPage(page, { scroll = false, showSkeleton = false } = {}) {
+    if (usesCursorPagination()) {
+        if (page < 1 || paginationLoading) return;
+        const loadedPages = Math.max(1, Math.ceil(allImages.length / itemsPerPage));
+        const targetPage = page > loadedPages && !browseHasMore ? loadedPages : page;
+        const pageChanged = currentPage !== targetPage;
+        currentPage = targetPage;
+        const needsRemotePage = targetPage > loadedPages;
+        updateResultCount();
+        if ((showSkeleton && pageChanged) || needsRemotePage) {
+            paginationLoading = true;
+            renderPagination();
+            renderGallerySkeleton();
+            try {
+                await Promise.all([
+                    needsRemotePage ? ensureBrowsePage(targetPage) : Promise.resolve(),
+                    new Promise((resolve) => setTimeout(resolve, PAGE_SKELETON_DURATION_MS))
+                ]);
+            } catch (error) {
+                console.error("Không thể tải trang thư viện tiếp theo:", error);
+                document.getElementById("gallery").textContent = "Không thể tải thêm ảnh. Hãy thử lại.";
+                return;
+            } finally {
+                paginationLoading = false;
+            }
+        }
+        const availablePages = Math.max(1, Math.ceil(allImages.length / itemsPerPage));
+        if (currentPage > availablePages) currentPage = availablePages;
+        filteredImages = [...allImages];
+        updateResultCount();
+        renderGallery(filteredImages.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage));
+        renderPagination();
+        updateSelectionControls();
+        if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+    }
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1) return;
     if (totalPages > 0 && page > totalPages) page = totalPages;
@@ -742,6 +945,41 @@ window.goToPage = async function goToPage(page, { scroll = false, showSkeleton =
 };
 
 function renderPagination() {
+    if (usesCursorPagination()) {
+        const loadedPages = Math.max(1, Math.ceil(filteredImages.length / itemsPerPage));
+        document.querySelectorAll(".gallery-pagination").forEach((container) => {
+            container.replaceChildren();
+            const addButton = (label, page, disabled = false, active = false) => {
+                const button = document.createElement("button");
+                button.className = `page-btn ${active ? "active" : ""}`;
+                button.innerHTML = label;
+                button.disabled = disabled || paginationLoading;
+                button.addEventListener("click", () => goToPage(page, { showSkeleton: true }));
+                container.appendChild(button);
+            };
+            addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
+            const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, loadedPages]
+                .filter((page) => page >= 1 && page <= loadedPages))]
+                .sort((first, second) => first - second);
+            pages.forEach((page, index) => {
+                if (index && page - pages[index - 1] > 1) {
+                    const dots = document.createElement("span");
+                    dots.className = "pagination-dots";
+                    dots.textContent = "…";
+                    container.appendChild(dots);
+                }
+                addButton(String(page), page, false, page === currentPage);
+            });
+            if (browseHasMore) {
+                const dots = document.createElement("span");
+                dots.className = "pagination-dots";
+                dots.textContent = "…";
+                container.appendChild(dots);
+            }
+            addButton('<span class="material-icons-outlined">chevron_right</span>', currentPage + 1, !browseHasMore && currentPage >= loadedPages);
+        });
+        return;
+    }
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     document.querySelectorAll(".gallery-pagination").forEach((container) => {
         container.replaceChildren();
@@ -911,10 +1149,16 @@ async function loadImages(user) {
         filteredImages = [];
         libraryCollections = [];
         selectedImageIds.clear();
+        browseCursor = null;
+        browseHasMore = false;
+        browseFirstPageReady = false;
+        fullLibraryLoaded = false;
+        fullLibraryLoad = null;
+        pendingDetailId = "";
     }
     renderGallerySkeleton();
     let receivedFirstSnapshot = false;
-    const photosQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
+    const photosQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"), limit(itemsPerPage));
     initialSnapshotTimer = setTimeout(() => {
         if (!receivedFirstSnapshot && activeLibraryUserUid === user.uid) {
             gallery.textContent = "Thư viện đang kết nối chậm. Hãy kiểm tra mạng rồi tải lại trang.";
@@ -924,9 +1168,12 @@ async function loadImages(user) {
         if (activeLibraryUserUid !== user.uid) return;
         try {
             const hasLiveChanges = receivedFirstSnapshot && snapshot.docChanges().length > 0;
-            allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-            populateAdvancedFilters();
-            syncAdvancedFilterControls();
+            const latestItems = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+            mergeLatestBrowsePage(latestItems, snapshot);
+            if (fullLibraryLoaded) {
+                populateAdvancedFilters();
+                syncAdvancedFilterControls();
+            }
             renderFilterTags();
             renderRoute({ preservePage: receivedFirstSnapshot });
             if (hasLiveChanges) showToast("Thư viện vừa được cập nhật.");
@@ -1056,8 +1303,21 @@ document.getElementById("detailFavorite").addEventListener("click", () => toggle
 document.getElementById("detailOpenOriginal").addEventListener("click", () => {
     if (activeDetailItem) trackInteraction(activeDetailItem, "views");
 });
-document.getElementById("advancedFilterToggle").addEventListener("click", () => {
+document.getElementById("advancedFilterToggle").addEventListener("click", async () => {
     const panel = document.getElementById("advancedFilters");
+    if (panel.hidden && !fullLibraryLoaded) {
+        const toggle = document.getElementById("advancedFilterToggle");
+        toggle.disabled = true;
+        try {
+            await ensureCompleteLibrary();
+        } catch (error) {
+            console.error("Không thể tải bộ lọc nâng cao:", error);
+            showToast("Không thể tải bộ lọc nâng cao. Hãy thử lại.", "error");
+            return;
+        } finally {
+            toggle.disabled = false;
+        }
+    }
     panel.hidden = !panel.hidden;
     document.getElementById("advancedFilterToggle").classList.toggle("active", !panel.hidden);
 });

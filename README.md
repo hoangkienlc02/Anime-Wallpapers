@@ -34,3 +34,9 @@ When an administrator deletes a user from the Admin page, the site deletes that 
 ## Backups and retention
 
 Cloudinary, Firebase, and Vercel are third-party services; none should be treated as a permanent-storage guarantee. Keep original files in at least one separate backup location (external drive plus another cloud provider is a practical minimum). The admin page can export its Firestore metadata as JSON, but that export does not replace copies of the media files.
+
+## Library pagination and Firestore cost
+
+The default client view opens at **Mới nhất** and listens only to the newest 20 documents. Selecting the next page reads one more 20-document batch with a Firestore cursor, so a visitor who sees page one does not read the entire archive.
+
+Global features that must search or order every document—search, game/anime tags, advanced filters, albums, saved items, and the non-default sort modes—load the full metadata list only when the visitor explicitly chooses that feature. This preserves accurate results without paying for a full-library realtime listener on every visit. The admin archive still loads the complete list deliberately because its dashboard and bulk-management tools require it.
