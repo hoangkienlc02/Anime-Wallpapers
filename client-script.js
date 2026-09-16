@@ -556,26 +556,8 @@ function renderFilterTags() {
     const container = document.getElementById("dynamic-tags");
     if (!container) return;
     if (!fullLibraryLoaded) {
-        container.hidden = false;
+        container.hidden = true;
         container.replaceChildren();
-        const loadButton = document.createElement("button");
-        loadButton.type = "button";
-        loadButton.className = "tag-btn";
-        loadButton.textContent = "LỌC THEO GAME / ANIME";
-        loadButton.addEventListener("click", async () => {
-            loadButton.disabled = true;
-            try {
-                await ensureCompleteLibrary();
-                renderFilterTags();
-                renderRoute({ preservePage: true });
-                showToast("Đã tải danh sách game / anime để lọc.");
-            } catch (error) {
-                console.error("Không thể tải danh sách tag:", error);
-                showToast("Không thể tải bộ lọc. Hãy thử lại.", "error");
-                loadButton.disabled = false;
-            }
-        });
-        container.appendChild(loadButton);
         return;
     }
     const counts = new Map();
@@ -1199,6 +1181,11 @@ async function loadImages(user) {
             showToast("Một phần dữ liệu cá nhân chưa đồng bộ được. Thư viện ảnh vẫn hoạt động.", "error");
         }
         if (receivedFirstSnapshot) renderRoute({ preservePage: true });
+        ensureCompleteLibrary().then(() => {
+            if (activeLibraryUserUid === user.uid) renderRoute({ preservePage: true });
+        }).catch((error) => {
+            console.warn("Không thể tải danh sách filter game/anime:", error);
+        });
     } catch (error) {
         console.error(error);
     }

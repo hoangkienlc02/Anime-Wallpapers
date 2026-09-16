@@ -143,7 +143,7 @@ button { color: inherit; }
 .selection-count { margin-left: auto; color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .85rem; font-weight: 700; letter-spacing: .08em; }
 .selection-toolbar .selection-count:first-child { margin-left: 0; }
 .selection-download { min-width: 130px; }
-.result-count { margin: 8px 0 0; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: 1.15rem; font-weight: 700; letter-spacing: .06em; }
+.result-count { display: none; }
 .sort-tabs { display: flex; align-items: center; align-self: stretch; gap: clamp(14px, 2.6vw, 36px); }
 .sort-tab { position: relative; padding: 0 0 18px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-size: .95rem; font-weight: 700; letter-spacing: .07em; transition: color .2s; }
 .sort-tab::after { content: ""; position: absolute; right: 0; bottom: -19px; left: 0; height: 2px; background: var(--accent); opacity: 0; transform: scaleX(.45); transition: .2s; }
