@@ -468,6 +468,34 @@ function refreshDetailPanel() {
     document.getElementById("detailDownloads").textContent = Number(item.downloads) || 0;
     document.getElementById("detailLikes").textContent = Number(item.likes) || 0;
     document.getElementById("detailOpenOriginal").href = item.url;
+    updateDetailNavigation();
+}
+
+function getDetailSequence() {
+    const filteredPhotos = filteredImages.filter((item) => !isVideo(item));
+    if (filteredPhotos.length > 1 && filteredPhotos.some((item) => item.id === activeDetailItem?.id)) return filteredPhotos;
+    return allImages.filter((item) => !isVideo(item));
+}
+
+function updateDetailNavigation() {
+    const previousButton = document.getElementById("detailPrevious");
+    const nextButton = document.getElementById("detailNext");
+    const sequence = getDetailSequence();
+    const canNavigate = sequence.length > 1 && sequence.some((item) => item.id === activeDetailItem?.id);
+    previousButton.disabled = !canNavigate;
+    nextButton.disabled = !canNavigate;
+}
+
+function openAdjacentDetail(direction) {
+    if (!activeDetailItem) return;
+    const sequence = getDetailSequence();
+    if (sequence.length < 2) return;
+    const currentIndex = sequence.findIndex((item) => item.id === activeDetailItem.id);
+    if (currentIndex < 0) return;
+    const nextItem = sequence[(currentIndex + direction + sequence.length) % sequence.length];
+    activeDetailItem = nextItem;
+    document.getElementById("lightbox-img").src = nextItem.url;
+    refreshDetailPanel();
 }
 
 window.openMediaDetails = (item) => {
@@ -853,6 +881,7 @@ window.deletePhoto = async (item) => {
     if (!confirm("Xóa vĩnh viễn file khỏi Cloudinary và thư viện?")) return;
     try {
         await removeOne(item);
+        if (activeDetailItem?.id === item.id) window.closeMediaDetails();
         renderAdminCollections();
         showToast("Đã xóa file và bản ghi.");
         await loadImages();
@@ -1323,6 +1352,8 @@ const backToTop = document.getElementById("backToTop");
 window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });
 backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 document.getElementById("detailClose").addEventListener("click", window.closeMediaDetails);
+document.getElementById("detailPrevious").addEventListener("click", (event) => { event.stopPropagation(); openAdjacentDetail(-1); });
+document.getElementById("detailNext").addEventListener("click", (event) => { event.stopPropagation(); openAdjacentDetail(1); });
 document.getElementById("detailDownload").addEventListener("click", () => {
     if (!activeDetailItem) return;
     window.downloadImage(activeDetailItem.url, `${activeDetailItem.subName || activeDetailItem.seriesName || activeDetailItem.theme || "anime"}${isVideo(activeDetailItem) ? ".mp4" : ".jpg"}`);
@@ -1332,6 +1363,9 @@ document.getElementById("detailEdit").addEventListener("click", () => {
     const item = activeDetailItem;
     window.closeMediaDetails();
     window.editPhoto(item);
+});
+document.getElementById("detailDelete").addEventListener("click", () => {
+    if (activeDetailItem) window.deletePhoto(activeDetailItem);
 });
 document.getElementById("adminCollectionForm").addEventListener("submit", createAdminCollection);
 document.getElementById("collectionPickerClose").addEventListener("click", closeCollectionPicker);
@@ -1343,6 +1377,9 @@ document.getElementById("collectionPickerSearch").addEventListener("input", () =
 });
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
+    if (event.key === "Escape" && activeDetailItem) return window.closeMediaDetails();
+    if (activeDetailItem && event.key === "ArrowRight") { event.preventDefault(); return openAdjacentDetail(1); }
+    if (activeDetailItem && event.key === "ArrowLeft") { event.preventDefault(); return openAdjacentDetail(-1); }
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
     if (event.key === "ArrowLeft") goToPage(currentPage - 1);
 });
