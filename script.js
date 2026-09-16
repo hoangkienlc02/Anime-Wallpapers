@@ -13,11 +13,14 @@ let lastModalTrigger = null;
 const selectedAdminIds = new Set();
 let adminCollections = [];
 let archiveUsers = [];
+let adminUserPage = 1;
+let adminCollectionPage = 1;
 let activeCollectionPicker = null;
 let collectionPickerIds = new Set();
 let collectionPickerPage = 1;
 const collectionPickerPerPage = 20;
 const itemsPerPage = 20;
+const adminListItemsPerPage = 5;
 const PAGE_SKELETON_DURATION_MS = 240;
 const ADMIN_LOAD_TIMEOUT_MS = 12000;
 let paginationLoading = false;
@@ -213,10 +216,52 @@ async function loadInteractionStats() {
     return stats;
 }
 
+function renderAdminListPagination(containerId, currentPage, totalPages, onPageChange) {
+    const container = document.getElementById(containerId);
+    container.replaceChildren();
+    if (totalPages <= 1) return;
+    const addButton = (label, page, disabled = false, active = false) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `page-btn ${active ? "active" : ""}`;
+        button.innerHTML = label;
+        button.disabled = disabled;
+        button.addEventListener("click", () => onPageChange(page));
+        container.appendChild(button);
+    };
+    addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
+    const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages]
+        .filter((page) => page >= 1 && page <= totalPages))]
+        .sort((first, second) => first - second);
+    pages.forEach((page, index) => {
+        if (index && page - pages[index - 1] > 1) {
+            const dots = document.createElement("span");
+            dots.className = "pagination-dots";
+            dots.textContent = "…";
+            container.appendChild(dots);
+        }
+        addButton(String(page), page, false, page === currentPage);
+    });
+    addButton('<span class="material-icons-outlined">chevron_right</span>', currentPage + 1, currentPage === totalPages);
+}
+
+function getAdminListPagination(containerId, list, label) {
+    let container = document.getElementById(containerId);
+    if (container) return container;
+    container = document.createElement("div");
+    container.id = containerId;
+    container.className = "admin-list-pagination pagination";
+    container.setAttribute("aria-label", label);
+    list.after(container);
+    return container;
+}
+
 function renderUserManagement() {
     const list = document.getElementById("adminUserList");
     const count = document.getElementById("adminUserCount");
+    const pagination = getAdminListPagination("adminUserPagination", list, "Phân trang người dùng");
     list.replaceChildren();
+    pagination.replaceChildren();
     count.textContent = `${archiveUsers.length} USER`;
     if (!archiveUsers.length) {
         const empty = document.createElement("p");
@@ -225,7 +270,13 @@ function renderUserManagement() {
         list.appendChild(empty);
         return;
     }
-    archiveUsers.forEach((user) => {
+    const totalPages = Math.ceil(archiveUsers.length / adminListItemsPerPage);
+    adminUserPage = Math.min(Math.max(adminUserPage, 1), totalPages);
+    const pageUsers = archiveUsers.slice(
+        (adminUserPage - 1) * adminListItemsPerPage,
+        adminUserPage * adminListItemsPerPage
+    );
+    pageUsers.forEach((user) => {
         const row = document.createElement("article");
         row.className = "admin-user-row";
         const details = document.createElement("div");
@@ -293,6 +344,10 @@ function renderUserManagement() {
         row.append(details, status, action, removeAction);
         list.appendChild(row);
     });
+    renderAdminListPagination("adminUserPagination", adminUserPage, totalPages, (page) => {
+        adminUserPage = page;
+        renderUserManagement();
+    });
 }
 
 function makeCollectionAction(label, icon, handler, className = "secondary-action") {
@@ -309,7 +364,9 @@ function makeCollectionAction(label, icon, handler, className = "secondary-actio
 
 function renderAdminCollections() {
     const list = document.getElementById("adminCollectionList");
+    const pagination = getAdminListPagination("adminCollectionPagination", list, "Phân trang bộ sưu tập");
     list.replaceChildren();
+    pagination.replaceChildren();
     if (!adminCollections.length) {
         const empty = document.createElement("p");
         empty.className = "collection-empty";
@@ -317,7 +374,13 @@ function renderAdminCollections() {
         list.appendChild(empty);
         return;
     }
-    adminCollections.forEach((collectionItem) => {
+    const totalPages = Math.ceil(adminCollections.length / adminListItemsPerPage);
+    adminCollectionPage = Math.min(Math.max(adminCollectionPage, 1), totalPages);
+    const pageCollections = adminCollections.slice(
+        (adminCollectionPage - 1) * adminListItemsPerPage,
+        adminCollectionPage * adminListItemsPerPage
+    );
+    pageCollections.forEach((collectionItem) => {
         const card = document.createElement("article");
         card.className = "admin-collection-card";
         const photoIds = (collectionItem.photoIds || []).filter((id) => allImages.some((item) => item.id === id));
@@ -349,6 +412,10 @@ function renderAdminCollections() {
         card.append(cover, info, actions);
         card.addEventListener("click", () => openCollectionPicker(collectionItem));
         list.appendChild(card);
+    });
+    renderAdminListPagination("adminCollectionPagination", adminCollectionPage, totalPages, (page) => {
+        adminCollectionPage = page;
+        renderAdminCollections();
     });
 }
 
