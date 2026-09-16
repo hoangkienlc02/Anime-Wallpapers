@@ -89,12 +89,12 @@ export function protectPage(onReady) {
     function resetToLibraryRoute({ redirect = false } = {}) {
         // Keep /admin stable so its dedicated login page continues to work.
         if (!registrationAllowed) return;
-        if (location.pathname !== "/wallpapers" || location.search || location.hash) {
+        if (location.pathname !== "/" || location.search || location.hash) {
             if (redirect) {
-                location.replace("/wallpapers");
+                location.replace("/");
                 return;
             }
-            history.replaceState({}, "", "/wallpapers");
+            history.replaceState({}, "", "/");
         }
     }
     async function showUnverifiedAccount(user) {
