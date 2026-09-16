@@ -457,6 +457,7 @@ function renderGallery(data) {
 
 function renderFilterTags() {
     const container = document.getElementById("dynamic-tags");
+    if (!container) return;
     const counts = new Map();
     allImages.forEach((item) => {
         const series = String(item.seriesName || "").trim();
@@ -828,14 +829,19 @@ async function loadImages(user) {
         let receivedFirstSnapshot = false;
         const photosQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
         unsubscribePhotos = onSnapshot(photosQuery, (snapshot) => {
-            const hasLiveChanges = receivedFirstSnapshot && snapshot.docChanges().length > 0;
-            allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-            populateAdvancedFilters();
-            syncAdvancedFilterControls();
-            renderFilterTags();
-            renderRoute({ preservePage: receivedFirstSnapshot });
-            if (hasLiveChanges) showToast("Thư viện vừa được cập nhật.");
-            receivedFirstSnapshot = true;
+            try {
+                const hasLiveChanges = receivedFirstSnapshot && snapshot.docChanges().length > 0;
+                allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+                populateAdvancedFilters();
+                syncAdvancedFilterControls();
+                renderFilterTags();
+                renderRoute({ preservePage: receivedFirstSnapshot });
+                if (hasLiveChanges) showToast("Thư viện vừa được cập nhật.");
+                receivedFirstSnapshot = true;
+            } catch (error) {
+                console.error("Không thể hiển thị thư viện:", error);
+                gallery.textContent = "Không thể hiển thị thư viện. Hãy tải lại trang.";
+            }
         }, (error) => {
             console.error("Không thể đồng bộ thư viện realtime:", error);
             gallery.textContent = "Không thể đồng bộ thư viện. Hãy kiểm tra quyền truy cập Firebase.";
