@@ -256,6 +256,11 @@ button { color: inherit; }
 .cloudinary-metrics span { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .73rem; font-weight: 700; letter-spacing: .1em; }
 .cloudinary-metrics strong { display: block; margin-top: 6px; overflow: hidden; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: clamp(1.55rem, 2.6vw, 2.35rem); font-weight: 800; line-height: .92; text-overflow: ellipsis; white-space: nowrap; }
 .cloudinary-metrics small { display: block; margin-top: 7px; color: var(--muted); font-size: .73rem; line-height: 1.35; }
+.usage-progress { height: 7px; margin-top: 10px; overflow: hidden; border: 1px solid var(--line); background: rgba(0, 0, 0, .22); }
+.usage-progress i { display: block; width: 0; height: 100%; background: #71d2a8; transition: width .35s ease, background .2s; }
+.usage-progress.is-warning i { background: #f3b755; }
+.usage-progress.is-critical i { background: var(--accent); }
+[data-theme="light"] .usage-progress { background: rgba(8, 37, 40, .1); }
 .admin-bulk-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 17px 0; border-bottom: 1px solid var(--line); }
 .admin-bulk-toolbar > span { margin-right: auto; color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .86rem; font-weight: 700; letter-spacing: .08em; }
 .admin-bulk-toolbar .btn-primary { width: auto; min-height: 42px; }

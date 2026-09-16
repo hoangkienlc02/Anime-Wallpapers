@@ -78,6 +78,19 @@ function usageDetail(metric, formatter = formatUsageValue) {
     return `Đã dùng ${formatter(metric.usage)} / ${formatter(metric.limit)}`;
 }
 
+function setUsageProgress(id, usage, limit) {
+    const progress = document.getElementById(id);
+    const used = Number(usage);
+    const maximum = Number(limit);
+    const percentage = Number.isFinite(used) && Number.isFinite(maximum) && maximum > 0
+        ? Math.min(100, Math.max(0, (used / maximum) * 100))
+        : 0;
+    progress.querySelector("i").style.width = `${percentage}%`;
+    progress.setAttribute("aria-valuenow", String(Math.round(percentage)));
+    progress.classList.toggle("is-warning", percentage >= 75 && percentage < 90);
+    progress.classList.toggle("is-critical", percentage >= 90);
+}
+
 async function loadCloudinaryUsage() {
     const refreshButton = document.getElementById("refreshCloudinaryUsage");
     refreshButton.disabled = true;
@@ -88,6 +101,7 @@ async function loadCloudinaryUsage() {
         const remainingCredits = creditUsage != null && creditLimit != null
             ? Math.max(0, creditLimit - creditUsage)
             : null;
+        const creditEquivalentBytes = Number.isFinite(Number(creditLimit)) ? Number(creditLimit) * 1024 ** 3 : null;
         document.getElementById("cloudinaryPlan").textContent = `${usage.plan || "Cloudinary"} · QUOTA HIỆN TẠI`;
         document.getElementById("cloudinaryCredits").textContent = remainingCredits == null ? "—" : `${formatUsageValue(remainingCredits)} CREDITS`;
         document.getElementById("cloudinaryCreditsDetail").textContent = usageDetail(usage.credits);
@@ -99,10 +113,14 @@ async function loadCloudinaryUsage() {
         document.getElementById("cloudinaryUpdated").textContent = usage.updatedAt
             ? `Cập nhật: ${new Date(usage.updatedAt).toLocaleString("vi-VN")}`
             : "Số liệu Cloudinary cập nhật định kỳ";
+        setUsageProgress("cloudinaryCreditsProgress", creditUsage, creditLimit);
+        setUsageProgress("cloudinaryStorageProgress", usage.storage?.usage, usage.storage?.limit ?? creditEquivalentBytes);
+        setUsageProgress("cloudinaryBandwidthProgress", usage.bandwidth?.usage, usage.bandwidth?.limit ?? creditEquivalentBytes);
     } catch (error) {
         console.error("Không thể tải Cloudinary usage:", error);
         document.getElementById("cloudinaryPlan").textContent = "KHÔNG THỂ TẢI CLOUDINARY USAGE";
         document.getElementById("cloudinaryCreditsDetail").textContent = "Kiểm tra Cloudinary API key/secret trên Vercel";
+        ["cloudinaryCreditsProgress", "cloudinaryStorageProgress", "cloudinaryBandwidthProgress"].forEach((id) => setUsageProgress(id, 0, 1));
     } finally {
         refreshButton.disabled = false;
     }
