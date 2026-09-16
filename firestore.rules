@@ -36,6 +36,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSelf(userId) || isOwner();
       // A newly registered user may only create their own active profile.
+      //
       allow create: if isSelf(userId)
         && request.resource.data.uid == userId
         && request.resource.data.email == request.auth.token.email
