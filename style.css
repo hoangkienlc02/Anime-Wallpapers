@@ -75,6 +75,11 @@ button { color: inherit; }
 [data-theme="light"] .admin-page .drop-zone:hover { background: var(--accent-soft); }
 [data-theme="light"] .admin-page .admin-collection-form input { color: var(--text); background: #fffef9; }
 [data-theme="light"] .admin-page .admin-collection-form input::placeholder { color: #58716e; opacity: 1; }
+[data-theme="light"] .admin-page .admin-collection-form input:-webkit-autofill,
+[data-theme="light"] .admin-page .admin-collection-form input:-webkit-autofill:hover,
+[data-theme="light"] .admin-page .admin-collection-form input:-webkit-autofill:focus { -webkit-text-fill-color: var(--text); box-shadow: 0 0 0 1000px #fffef9 inset; }
+[data-theme="light"] .admin-page .collection-picker-toolbar input { color: var(--text); background: #fffef9; }
+[data-theme="light"] .admin-page .collection-picker-toolbar input::placeholder { color: #58716e; opacity: 1; }
 [data-theme="light"] .admin-page .dashboard-card > span,
 [data-theme="light"] .admin-page .dashboard-card small,
 [data-theme="light"] .admin-page .admin-bulk-toolbar > span,

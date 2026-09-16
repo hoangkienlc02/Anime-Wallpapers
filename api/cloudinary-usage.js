@@ -39,7 +39,9 @@ module.exports = async (req, res) => {
             storage: metric(data.storage),
             bandwidth: metric(data.bandwidth),
             transformations: metric(data.transformations),
-            resources: Number.isFinite(Number(data.resources)) ? Number(data.resources) : null
+            resources: Number.isFinite(Number(data.resources?.usage ?? data.resources))
+                ? Number(data.resources?.usage ?? data.resources)
+                : null
         });
     } catch (error) {
         sendError(res, error);

@@ -209,7 +209,8 @@ window.closeMediaDetails = () => {
     document.getElementById("lightbox").style.display = "none";
     activeDetailItem = null;
     if (location.pathname.startsWith("/wallpaper/")) {
-        history.pushState({}, "", "/wallpapers");
+        // Replace the detail route so Back does not immediately reopen this same modal.
+        history.replaceState({}, "", "/wallpapers");
         renderRoute();
     }
 };
