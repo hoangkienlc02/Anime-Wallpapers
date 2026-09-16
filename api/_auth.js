@@ -18,9 +18,10 @@ async function requireAdmin(req) {
         }
     );
     const data = await response.json();
-    const uid = data.users?.[0]?.localId;
+    const authenticatedUser = data.users?.[0];
+    const uid = authenticatedUser?.localId;
 
-    if (!response.ok || uid !== adminUid) {
+    if (!response.ok || uid !== adminUid || authenticatedUser?.emailVerified !== true) {
         const error = new Error("Forbidden");
         error.statusCode = 403;
         throw error;

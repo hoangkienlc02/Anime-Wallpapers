@@ -1,0 +1,9 @@
+# Local secrets and deployment metadata must never be committed.
+.env
+.env.*
+!.env.example
+.vercel/
+
+# Local tooling output.
+node_modules/
+*.log

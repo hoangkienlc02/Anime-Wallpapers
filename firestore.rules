@@ -33,6 +33,13 @@ service cloud.firestore {
       allow create, update, delete: if isOwner();
     }
 
+    // Small public-to-members catalog used to display game/anime filters without
+    // making every client read the whole image library.
+    match /appConfig/{configId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isOwner();
+    }
+
     match /users/{userId} {
       allow read: if isSelf(userId) || isOwner();
       // A newly registered user may only create their own active profile.

@@ -10,7 +10,10 @@ let sortMode = "newest";
 let activeDetailItem = null;
 let lastDetailTrigger = null;
 let libraryCollections = [];
+let filterCatalog = [];
+let jsZipLoadPromise = null;
 let unsubscribePhotos = null;
+let unsubscribeFilterCatalog = null;
 let activeLibraryUserUid = null;
 let initialSnapshotTimer = null;
 let browseCursor = null;
@@ -52,6 +55,8 @@ function setPersonalLocalState(type, photoId, enabled) {
 function clearLibrarySessionState() {
     unsubscribePhotos?.();
     unsubscribePhotos = null;
+    unsubscribeFilterCatalog?.();
+    unsubscribeFilterCatalog = null;
     if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
     initialSnapshotTimer = null;
     activeLibraryUserUid = null;
@@ -66,6 +71,7 @@ function clearLibrarySessionState() {
     fullLibraryLoad = null;
     pendingDetailId = "";
     libraryCollections = [];
+    filterCatalog = [];
     cloudFavoriteIds.clear();
     cloudDownloadIds.clear();
     cloudLikeIds.clear();
@@ -555,24 +561,19 @@ function renderGallery(data) {
 function renderFilterTags() {
     const container = document.getElementById("dynamic-tags");
     if (!container) return;
-    if (!fullLibraryLoaded) {
-        container.hidden = true;
-        container.replaceChildren();
-        return;
-    }
-    const counts = new Map();
-    allImages.forEach((item) => {
-        const series = String(item.seriesName || "").trim();
-        if (series) counts.set(series, (counts.get(series) || 0) + 1);
-    });
+    // Before the admin has created the small catalog document, an explicitly
+    // loaded full library can still provide the tags as a safe fallback.
+    const source = filterCatalog.length
+        ? filterCatalog
+        : fullLibraryLoaded ? buildFilterCatalogFromImages(allImages) : [];
     container.replaceChildren();
-    container.hidden = counts.size === 0;
-    if (!counts.size) return;
+    container.hidden = source.length === 0;
+    if (!source.length) return;
     const caption = document.createElement("span");
     caption.className = "filter-caption";
     caption.textContent = "GAME / ANIME";
     container.appendChild(caption);
-    [...counts.entries()].sort(([first], [second]) => first.localeCompare(second, "vi")).forEach(([series, total]) => {
+    [...source].sort((first, second) => first.name.localeCompare(second.name, "vi")).forEach(({ name: series, count: total }) => {
         const tag = `seriesname:${normalize(series)}`;
         const button = document.createElement("button");
         button.type = "button";
@@ -585,6 +586,33 @@ function renderFilterTags() {
         button.appendChild(count);
         button.addEventListener("click", () => window.filterByDynamicTag(tag));
         container.appendChild(button);
+    });
+}
+
+function buildFilterCatalogFromImages(items) {
+    const counts = new Map();
+    items.forEach((item) => {
+        const name = String(item.seriesName || "").trim();
+        if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return [...counts.entries()].map(([name, count]) => ({ name, count }));
+}
+
+function subscribeFilterCatalog() {
+    unsubscribeFilterCatalog?.();
+    filterCatalog = [];
+    unsubscribeFilterCatalog = onSnapshot(doc(db, "appConfig", "libraryFilters"), (snapshot) => {
+        const rawCatalog = snapshot.exists() && Array.isArray(snapshot.data().series) ? snapshot.data().series : [];
+        filterCatalog = rawCatalog
+            .map((item) => ({
+                name: String(typeof item === "string" ? item : item?.name || "").trim(),
+                count: Math.max(0, Number(typeof item === "string" ? 0 : item?.count) || 0)
+            }))
+            .filter((item) => item.name);
+        renderFilterTags();
+    }, (error) => {
+        console.warn("Không thể đồng bộ catalog Game/Anime:", error);
+        renderFilterTags();
     });
 }
 
@@ -1063,17 +1091,22 @@ function safeFilename(item, index) {
 async function downloadSelectedAsZip() {
     const selectedItems = allImages.filter((item) => selectedImageIds.has(item.id));
     if (!selectedItems.length) return;
-    if (!window.JSZip) {
-        showToast("Không tải được công cụ ZIP. Kiểm tra kết nối mạng rồi thử lại.", "error");
-        return;
-    }
     if (selectedItems.length > 30) {
         showToast("Để trình duyệt ổn định, mỗi lần chỉ tải ZIP tối đa 30 tệp.", "error");
         return;
     }
     const button = document.getElementById("downloadSelection");
-    button.disabled = true;
     const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="material-icons-outlined">hourglass_top</span> ĐANG CHUẨN BỊ ZIP';
+    try {
+        await loadJSZip();
+    } catch (error) {
+        showToast("Không tải được công cụ ZIP. Kiểm tra kết nối mạng rồi thử lại.", "error");
+        button.disabled = selectedImageIds.size === 0;
+        button.innerHTML = originalLabel;
+        return;
+    }
     const zip = new window.JSZip();
     const failures = [];
     try {
@@ -1109,6 +1142,33 @@ async function downloadSelectedAsZip() {
     }
 }
 
+function loadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (jsZipLoadPromise) return jsZipLoadPromise;
+    jsZipLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        const timeout = setTimeout(() => {
+            script.remove();
+            reject(new Error("Tải JSZip quá lâu."));
+        }, 15000);
+        script.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+        script.async = true;
+        script.onload = () => {
+            clearTimeout(timeout);
+            window.JSZip ? resolve(window.JSZip) : reject(new Error("JSZip không khởi tạo được."));
+        };
+        script.onerror = () => {
+            clearTimeout(timeout);
+            reject(new Error("Không thể tải JSZip."));
+        };
+        document.head.appendChild(script);
+    }).catch((error) => {
+        jsZipLoadPromise = null;
+        throw error;
+    });
+    return jsZipLoadPromise;
+}
+
 function trapDetailFocus(event) {
     if (event.key !== "Tab" || !activeDetailItem) return;
     const focusable = [...document.querySelectorAll("#lightbox button:not(:disabled), #lightbox a[href], #lightbox [tabindex]:not([tabindex='-1'])")]
@@ -1137,6 +1197,8 @@ async function loadImages(user) {
         fullLibraryLoaded = false;
         fullLibraryLoad = null;
         pendingDetailId = "";
+        filterCatalog = [];
+        subscribeFilterCatalog();
     }
     renderGallerySkeleton();
     let receivedFirstSnapshot = false;
@@ -1181,11 +1243,6 @@ async function loadImages(user) {
             showToast("Một phần dữ liệu cá nhân chưa đồng bộ được. Thư viện ảnh vẫn hoạt động.", "error");
         }
         if (receivedFirstSnapshot) renderRoute({ preservePage: true });
-        ensureCompleteLibrary().then(() => {
-            if (activeLibraryUserUid === user.uid) renderRoute({ preservePage: true });
-        }).catch((error) => {
-            console.warn("Không thể tải danh sách filter game/anime:", error);
-        });
     } catch (error) {
         console.error(error);
     }
@@ -1330,7 +1387,10 @@ document.getElementById("clearSelection").addEventListener("click", () => {
     updateSelectionControls();
 });
 window.addEventListener("popstate", renderRoute);
-window.addEventListener("beforeunload", () => unsubscribePhotos?.());
+window.addEventListener("beforeunload", () => {
+    unsubscribePhotos?.();
+    unsubscribeFilterCatalog?.();
+});
 window.addEventListener("anime-auth-user-changed", (event) => {
     if (!event.detail?.uid) clearLibrarySessionState();
 });

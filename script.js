@@ -1080,6 +1080,29 @@ function renderFilterTags() {
     });
 }
 
+function buildFilterCatalog() {
+    const counts = new Map();
+    allImages.forEach((item) => {
+        const name = String(item.seriesName || "").trim();
+        if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return [...counts.entries()]
+        .sort(([first], [second]) => first.localeCompare(second, "vi"))
+        .map(([name, count]) => ({ name, count }));
+}
+
+let lastFilterCatalogSignature = "";
+async function syncFilterCatalog() {
+    const series = buildFilterCatalog();
+    const signature = JSON.stringify(series);
+    if (signature === lastFilterCatalogSignature) return;
+    await setDoc(doc(db, "appConfig", "libraryFilters"), {
+        series,
+        updatedAt: serverTimestamp()
+    });
+    lastFilterCatalogSignature = signature;
+}
+
 window.filterByDynamicTag = (tag, button) => {
     document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
     button?.classList.add("active");
@@ -1222,6 +1245,7 @@ async function loadImages() {
         renderFilterTags();
         goToPage(1, { scroll: false });
         loadCloudinaryUsage();
+        syncFilterCatalog().catch((error) => console.warn("Không thể cập nhật catalog Game/Anime:", error));
     } catch (error) {
         console.error(error);
         gallery.textContent = error.message === "Thư viện đang kết nối chậm."
