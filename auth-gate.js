@@ -88,6 +88,7 @@ export function protectPage(onReady) {
     const error = document.getElementById("loginError");
     const signOutButton = document.getElementById("signOutButton");
     const accountLabel = document.getElementById("accountLabel");
+    const passwordToggleButtons = [...document.querySelectorAll("[data-password-toggle]")];
     const registrationAllowed = !document.body.classList.contains("admin-page");
     let authMode = "login", hasStarted = false, authSubmissionInFlight = false, registrationInFlight = false, verificationLastSentAt = 0, revealInFlight = null;
 
@@ -114,6 +115,16 @@ export function protectPage(onReady) {
         if (verifyNotice) verifyNotice.hidden = true;
         setError();
     }
+    passwordToggleButtons.forEach((button) => button.addEventListener("click", () => {
+        const input = document.getElementById(button.dataset.passwordToggle);
+        if (!input) return;
+        const visible = input.type === "password";
+        input.type = visible ? "text" : "password";
+        button.setAttribute("aria-pressed", String(visible));
+        button.setAttribute("aria-label", visible ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+        button.querySelector(".material-icons-outlined").textContent = visible ? "visibility_off" : "visibility";
+        input.focus();
+    }));
     let sessionLoaderStartedAt = performance.now();
     function startSessionCheck() {
         sessionLoaderStartedAt = performance.now();

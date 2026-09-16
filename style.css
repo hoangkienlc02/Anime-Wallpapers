@@ -48,6 +48,11 @@ button { color: inherit; }
 .login-card label[hidden] { display: none; }
 .login-card input, .form-group input, .form-group select { display: block; width: 100%; margin-top: 8px; padding: 14px 0; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; outline: 0; }
 .login-card input:focus, .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+.login-card .password-field { position: relative; display: block; }
+.login-card .password-field input { padding-right: 48px; }
+.password-toggle { position: absolute; right: 0; bottom: 0; display: grid; width: 43px; height: 48px; place-items: center; padding: 0; border: 0; color: var(--muted); background: transparent; cursor: pointer; }
+.password-toggle:hover, .password-toggle:focus-visible { color: var(--accent); outline: none; }
+.password-toggle .material-icons-outlined { font-size: 1.3rem; }
 .form-group select option { color: #082528; background: #f7f5ed; }
 .form-group select option:disabled { color: #607878; }
 .login-error { min-height: 1.5em; color: #ff856e; font-size: .85rem; line-height: 1.45; margin: 20px 0 10px; }
