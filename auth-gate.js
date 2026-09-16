@@ -4,7 +4,7 @@ import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "https://www.gst
 import { createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const OWNER_UID = "aVIhWxMYfRNciqRmuNselJyi1MP2";
-const MIN_PASSWORD_LENGTH = 12;
+const MIN_PASSWORD_LENGTH = 8;
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const VERIFICATION_COOLDOWN_MS = 60 * 1000;
@@ -12,7 +12,6 @@ const MIN_SESSION_LOADER_MS = 420;
 
 function passwordError(password) {
     if (password.length < MIN_PASSWORD_LENGTH) return `Mật khẩu cần ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`;
-    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) return "Mật khẩu cần có chữ hoa, chữ thường, số và ký tự đặc biệt.";
     return "";
 }
 
@@ -84,6 +83,7 @@ export function protectPage(onReady) {
     const switchButton = document.getElementById("authSwitchButton");
     const forgotPasswordButton = document.getElementById("forgotPasswordButton");
     const verifyNotice = document.getElementById("verifyNotice");
+    const verifyNoticeText = document.getElementById("verifyNoticeText");
     const resendVerificationButton = document.getElementById("resendVerificationButton");
     const error = document.getElementById("loginError");
     const signOutButton = document.getElementById("signOutButton");
@@ -92,6 +92,12 @@ export function protectPage(onReady) {
     let authMode = "login", hasStarted = false, authSubmissionInFlight = false, registrationInFlight = false, verificationLastSentAt = 0, revealInFlight = null;
 
     const setError = (message = "") => { error.textContent = message; };
+    function showVerificationNotice(message, { canResend = false } = {}) {
+        if (!verifyNotice) return;
+        verifyNotice.hidden = false;
+        if (verifyNoticeText) verifyNoticeText.textContent = message;
+        if (resendVerificationButton) resendVerificationButton.hidden = !canResend;
+    }
     function setAuthMode(mode) {
         if (mode === "register" && !registrationAllowed) return;
         authMode = mode;
@@ -144,7 +150,7 @@ export function protectPage(onReady) {
         appShell.hidden = true;
         gate.hidden = false;
         emailInput.value = user.email || emailInput.value;
-        if (verifyNotice) verifyNotice.hidden = false;
+        showVerificationNotice("Email chưa xác minh. Bro có thể gửi lại email xác minh.", { canResend: true });
         setError("Email này chưa được xác minh nên chưa thể truy cập thư viện.");
         await finishSessionCheck();
     }
@@ -230,7 +236,8 @@ export function protectPage(onReady) {
                 registrationInFlight = false;
                 setAuthMode("login");
                 emailInput.value = email;
-                setError("Tài khoản đã tạo. Hãy xác minh email trước khi đăng nhập.");
+                showVerificationNotice(`Đã gửi email xác minh tới ${email}. Mở email và bấm link xác minh trước khi đăng nhập.`, { canResend: false });
+                setError();
             } else {
                 const credential = await signInWithEmailAndPassword(auth, email, password);
                 clearLoginGuard(email);

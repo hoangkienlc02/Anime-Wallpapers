@@ -19,7 +19,7 @@ In **Firebase Console → Authentication**:
 
 1. Add the Vercel domain (and any local development domain) under **Settings → Authorized domains**, otherwise verification and password-reset links will fail.
 2. In **Templates**, customize the email-verification and password-reset messages so users recognize them.
-3. Enable the password policy and email-enumeration protection if they are available on the project. The browser also enforces a 12-character password with upper/lowercase, a number, and a special character for new registrations.
+3. Enable email-enumeration protection if it is available on the project. The browser requires passwords to have at least 8 characters.
 
 Unverified accounts cannot read the `photos` or `collections` data. Existing users, including the administrator, need to verify their email once before they can use the updated site.
 

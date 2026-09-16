@@ -23,8 +23,7 @@ function isAdminSession() {
 }
 
 function validateNewPassword(password) {
-    if (password.length < 12) return "Mật khẩu mới cần ít nhất 12 ký tự.";
-    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) return "Mật khẩu mới cần chữ hoa, chữ thường, số và ký tự đặc biệt.";
+    if (password.length < 8) return "Mật khẩu mới cần ít nhất 8 ký tự.";
     return "";
 }
 
