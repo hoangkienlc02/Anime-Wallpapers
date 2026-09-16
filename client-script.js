@@ -732,12 +732,13 @@ document.getElementById("detailDownload").addEventListener("click", () => {
 });
 document.getElementById("detailShare").addEventListener("click", async () => {
     if (!activeDetailItem) return;
-    const shareUrl = `${location.origin}/wallpaper/${encodeURIComponent(activeDetailItem.id)}`;
+    // Copy the direct Cloudinary asset, not the protected application route, so the pasted URL opens the image itself.
+    const shareUrl = activeDetailItem.url;
     try {
         await navigator.clipboard.writeText(shareUrl);
-        showToast("Đã sao chép link ảnh.");
+        showToast("Đã sao chép link ảnh trực tiếp.");
     } catch {
-        window.prompt("Sao chép link ảnh này:", shareUrl);
+        window.prompt("Sao chép link ảnh trực tiếp này:", shareUrl);
     }
 });
 document.getElementById("detailLike").addEventListener("click", toggleLike);
