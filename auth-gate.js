@@ -56,7 +56,7 @@ export function protectPage(onReady) {
     const signOutButton = document.getElementById("signOutButton");
     const accountLabel = document.getElementById("accountLabel");
     const registrationAllowed = !document.body.classList.contains("admin-page");
-    let authMode = "login", hasStarted = false, authSubmissionInFlight = false, registrationInFlight = false, verificationLastSentAt = 0;
+    let authMode = "login", hasStarted = false, authSubmissionInFlight = false, registrationInFlight = false, verificationLastSentAt = 0, revealInFlight = null;
 
     const setError = (message = "") => { error.textContent = message; };
     function setAuthMode(mode) {
@@ -86,24 +86,38 @@ export function protectPage(onReady) {
     }
     async function revealApp(user) {
         if (registrationInFlight) return;
-        await reload(user);
-        if (!user.emailVerified) return showUnverifiedAccount(user);
-        // Firestore Rules reads email_verified from the ID token, not the
-        // refreshed User profile. Force a new token after verification so a
-        // previously unverified account can load the library immediately.
-        await user.getIdToken(true);
-        if (!registrationAllowed && user.uid !== OWNER_UID) {
-            setError("Tài khoản này không có quyền truy cập khu vực Quản trị.");
-            try { await signOut(auth); } finally { finishSessionCheck(); }
-            return;
-        }
-        if (verifyNotice) verifyNotice.hidden = true;
-        gate.hidden = true;
-        appShell.hidden = false;
-        appShell.dataset.userRole = user.uid === OWNER_UID ? "admin" : "client";
-        accountLabel.textContent = user.email || "Đã đăng nhập";
-        finishSessionCheck();
-        if (!hasStarted) { hasStarted = true; await onReady(user); }
+        // Firebase emits onAuthStateChanged while signInWithEmailAndPassword
+        // is still resolving. Reuse the same check so two racing callbacks
+        // cannot alternately show and hide the app.
+        if (revealInFlight) return revealInFlight;
+        revealInFlight = (async () => {
+            await reload(user);
+            const currentUser = auth.currentUser;
+            if (!currentUser || currentUser.uid !== user.uid) return;
+            // Firestore Rules reads this JWT claim, rather than the cached
+            // User profile. Forcing a token renewal makes both checks agree.
+            const token = await currentUser.getIdTokenResult(true);
+            if (token.claims.email_verified !== true) return showUnverifiedAccount(currentUser);
+            if (!registrationAllowed && currentUser.uid !== OWNER_UID) {
+                setError("Tài khoản này không có quyền truy cập khu vực Quản trị.");
+                try { await signOut(auth); } finally { finishSessionCheck(); }
+                return;
+            }
+            if (verifyNotice) verifyNotice.hidden = true;
+            gate.hidden = true;
+            appShell.hidden = false;
+            appShell.dataset.userRole = currentUser.uid === OWNER_UID ? "admin" : "client";
+            accountLabel.textContent = currentUser.email || "Đã đăng nhập";
+            finishSessionCheck();
+            if (!hasStarted) { hasStarted = true; await onReady(currentUser); }
+        })().catch((err) => {
+            console.warn("Could not refresh the verified session:", err.code || err.message);
+            appShell.hidden = true;
+            gate.hidden = false;
+            setError("Không thể xác minh phiên đăng nhập. Hãy đăng xuất rồi thử lại.");
+            finishSessionCheck();
+        }).finally(() => { revealInFlight = null; });
+        return revealInFlight;
     }
     async function sendVerification(user) {
         const elapsed = Date.now() - verificationLastSentAt;
