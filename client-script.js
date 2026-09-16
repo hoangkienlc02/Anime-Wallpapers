@@ -344,14 +344,6 @@ window.downloadImage = async (url, filename) => {
     }
 };
 
-const darkModeToggle = document.getElementById("darkModeToggle");
-document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
-darkModeToggle.addEventListener("click", () => {
-    const isDark = document.documentElement.dataset.theme === "dark";
-    document.documentElement.dataset.theme = isDark ? "light" : "dark";
-    localStorage.setItem("theme", isDark ? "light" : "dark");
-});
-
 function makeTag(text) {
     const tag = document.createElement("span");
     tag.className = "tag-label";
@@ -465,7 +457,33 @@ function renderGallery(data) {
 }
 
 function renderFilterTags() {
-    // Metadata is filtered through the compact advanced-filter panel.
+    const container = document.getElementById("dynamic-tags");
+    const counts = new Map();
+    allImages.forEach((item) => {
+        const series = String(item.seriesName || "").trim();
+        if (series) counts.set(series, (counts.get(series) || 0) + 1);
+    });
+    container.replaceChildren();
+    container.hidden = counts.size === 0;
+    if (!counts.size) return;
+    const caption = document.createElement("span");
+    caption.className = "filter-caption";
+    caption.textContent = "GAME / ANIME";
+    container.appendChild(caption);
+    [...counts.entries()].sort(([first], [second]) => first.localeCompare(second, "vi")).forEach(([series, total]) => {
+        const tag = `seriesname:${normalize(series)}`;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "tag-btn";
+        button.dataset.tag = tag;
+        button.append(document.createTextNode(`${series} `));
+        const count = document.createElement("span");
+        count.className = "tag-count";
+        count.textContent = total;
+        button.appendChild(count);
+        button.addEventListener("click", () => window.filterByDynamicTag(tag));
+        container.appendChild(button);
+    });
 }
 
 function filterByTerm(term, source = allImages) {

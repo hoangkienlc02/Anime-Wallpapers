@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { auth, db } from "./firebase-config.js";
 import { getIdToken, protectPage } from "./auth-gate.js";
 
@@ -205,7 +205,38 @@ function renderUserManagement() {
                 action.disabled = false;
             }
         });
-        row.append(details, status, action);
+        const removeAction = document.createElement("button");
+        removeAction.type = "button";
+        removeAction.className = "danger-action";
+        removeAction.textContent = "XÓA USER";
+        removeAction.disabled = user.id === auth.currentUser?.uid;
+        removeAction.addEventListener("click", async () => {
+            if (!confirm(`Xóa dữ liệu riêng và chặn vĩnh viễn user “${user.email || user.id}” khỏi website?`)) return;
+            action.disabled = true;
+            removeAction.disabled = true;
+            try {
+                await setDoc(doc(db, "deletedUsers", user.id), {
+                    uid: user.id,
+                    email: user.email || "",
+                    deletedAt: serverTimestamp()
+                });
+                const [favorites, downloads] = await Promise.all([
+                    getDocs(collection(db, "users", user.id, "favorites")),
+                    getDocs(collection(db, "users", user.id, "downloads"))
+                ]);
+                await Promise.all([...favorites.docs, ...downloads.docs].map((entry) => deleteDoc(entry.ref)));
+                await deleteDoc(doc(db, "users", user.id));
+                archiveUsers = archiveUsers.filter((entry) => entry.id !== user.id);
+                renderUserManagement();
+                showToast("Đã xóa dữ liệu user và chặn truy cập lại.");
+            } catch (error) {
+                console.error(error);
+                showToast("Không thể xóa user. Hãy kiểm tra Firestore Rules.", "error");
+                action.disabled = false;
+                removeAction.disabled = false;
+            }
+        });
+        row.append(details, status, action, removeAction);
         list.appendChild(row);
     });
 }
@@ -545,14 +576,6 @@ window.downloadImage = async (url, filename) => {
         window.open(url, "_blank", "noopener");
     }
 };
-
-const darkModeToggle = document.getElementById("darkModeToggle");
-document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
-darkModeToggle.addEventListener("click", () => {
-    const isDark = document.documentElement.dataset.theme === "dark";
-    document.documentElement.dataset.theme = isDark ? "light" : "dark";
-    localStorage.setItem("theme", isDark ? "light" : "dark");
-});
 
 async function getFileTechnicalMetadata(file) {
     const base = { fileSizeBytes: file.size };

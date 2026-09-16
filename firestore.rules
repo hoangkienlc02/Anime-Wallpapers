@@ -13,18 +13,23 @@ service cloud.firestore {
       return verifiedUser() && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
     }
 
+    function activeUser() {
+      return verifiedUser()
+        && !exists(/databases/$(database)/documents/deletedUsers/$(request.auth.uid));
+    }
+
     function isSelf(userId) {
-      return verifiedUser() && request.auth.uid == userId;
+      return activeUser() && request.auth.uid == userId;
     }
 
     match /photos/{photoId} {
       // Only verified accounts can view; only the owner can manage archive data.
-      allow read: if verifiedUser();
+      allow read: if activeUser();
       allow create, update, delete: if isOwner();
     }
 
     match /collections/{collectionId} {
-      allow read: if verifiedUser();
+      allow read: if activeUser();
       allow create, update, delete: if isOwner();
     }
 
@@ -52,6 +57,13 @@ service cloud.firestore {
       match /downloads/{photoId} {
         allow read, create, update, delete: if isSelf(userId) || isOwner();
       }
+    }
+
+    match /deletedUsers/{userId} {
+      // A removed user may read only their own tombstone so the login gate
+      // can show a clear message instead of recreating their profile.
+      allow read: if (verifiedUser() && request.auth.uid == userId) || isOwner();
+      allow create, update, delete: if isOwner();
     }
   }
 }

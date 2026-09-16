@@ -39,6 +39,12 @@ function clearLoginGuard(email) { try { localStorage.removeItem(loginGuardKey(em
 function formatRemaining(milliseconds) { return `${Math.max(1, Math.ceil(milliseconds / 60000))} phút`; }
 
 async function ensureUserProfile(user) {
+    const deletionRef = doc(db, "deletedUsers", user.uid);
+    if ((await getDoc(deletionRef)).exists()) {
+        const error = new Error("Tài khoản đã bị xóa khỏi website.");
+        error.code = "account-deleted";
+        throw error;
+    }
     const profileRef = doc(db, "users", user.uid);
     const snapshot = await getDoc(profileRef);
     if (!snapshot.exists()) {
@@ -177,6 +183,9 @@ export function protectPage(onReady) {
             if (err.code === "account-blocked") {
                 await signOut(auth);
                 setError("Tài khoản này đã bị quản trị viên chặn.");
+            } else if (err.code === "account-deleted") {
+                await signOut(auth);
+                setError("Tài khoản này đã bị quản trị viên xóa khỏi website.");
             } else if (err.code === "permission-denied") {
                 setError("Firebase đang chặn hồ sơ tài khoản. Hãy Publish file firestore.rules mới trong Firebase Console rồi tải lại trang.");
             } else if (err.code === "unavailable") {

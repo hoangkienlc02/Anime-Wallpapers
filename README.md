@@ -29,6 +29,8 @@ After this update, the first successful verified login creates a `users/{uid}` p
 
 Before deploying this version, publish the new `firestore.rules`. Without that step, the profile, favorite/history synchronization, and admin user list will be denied by Firebase.
 
+When an administrator deletes a user from the Admin page, the site deletes that person's profile, favorites, and download history, then stores a protected deletion record so the same Firebase UID cannot reopen the website. The Firebase Authentication identity itself is retained because deleting another Firebase Auth account requires server-side service-account credentials, which are intentionally not stored in this browser application.
+
 ## Backups and retention
 
 Cloudinary, Firebase, and Vercel are third-party services; none should be treated as a permanent-storage guarantee. Keep original files in at least one separate backup location (external drive plus another cloud provider is a practical minimum). The admin page can export its Firestore metadata as JSON, but that export does not replace copies of the media files.
