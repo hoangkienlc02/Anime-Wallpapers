@@ -529,7 +529,7 @@ window.sortGallery = (mode, button) => {
     goToPage(1, { scroll: false });
 };
 
-window.goToPage = function goToPage(page, { scroll = true } = {}) {
+window.goToPage = function goToPage(page, { scroll = false } = {}) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1 || (totalPages > 0 && page > totalPages)) return;
     currentPage = page;
@@ -542,30 +542,31 @@ window.goToPage = function goToPage(page, { scroll = true } = {}) {
 
 function renderPagination() {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-    const container = document.getElementById("pagination");
-    container.replaceChildren();
-    if (totalPages <= 1) return;
-    const addButton = (label, page, disabled = false, active = false) => {
-        const button = document.createElement("button");
-        button.className = `page-btn ${active ? "active" : ""}`;
-        button.innerHTML = label;
-        button.disabled = disabled;
-        button.addEventListener("click", () => goToPage(page));
-        container.appendChild(button);
-    };
-    addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
-    const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages].filter((page) => page >= 1 && page <= totalPages))]
-        .sort((a, b) => a - b);
-    pages.forEach((page, index) => {
-        if (index && page - pages[index - 1] > 1) {
-            const dots = document.createElement("span");
-            dots.className = "pagination-dots";
-            dots.textContent = "…";
-            container.appendChild(dots);
-        }
-        addButton(String(page), page, false, page === currentPage);
+    document.querySelectorAll(".gallery-pagination").forEach((container) => {
+        container.replaceChildren();
+        if (totalPages <= 1) return;
+        const addButton = (label, page, disabled = false, active = false) => {
+            const button = document.createElement("button");
+            button.className = `page-btn ${active ? "active" : ""}`;
+            button.innerHTML = label;
+            button.disabled = disabled;
+            button.addEventListener("click", () => goToPage(page));
+            container.appendChild(button);
+        };
+        addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
+        const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages].filter((page) => page >= 1 && page <= totalPages))]
+            .sort((a, b) => a - b);
+        pages.forEach((page, index) => {
+            if (index && page - pages[index - 1] > 1) {
+                const dots = document.createElement("span");
+                dots.className = "pagination-dots";
+                dots.textContent = "…";
+                container.appendChild(dots);
+            }
+            addButton(String(page), page, false, page === currentPage);
+        });
+        addButton('<span class="material-icons-outlined">chevron_right</span>', currentPage + 1, currentPage === totalPages);
     });
-    addButton('<span class="material-icons-outlined">chevron_right</span>', currentPage + 1, currentPage === totalPages);
 }
 
 async function loadCollections() {
