@@ -1128,7 +1128,7 @@ async function loadImages() {
     const gallery = document.getElementById("gallery");
     renderGallerySkeleton();
     try {
-        const [snapshot, interactionStats] = await Promise.all([
+        const [snapshot, , , interactionStats] = await Promise.all([
             withTimeout(getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))), ADMIN_LOAD_TIMEOUT_MS, "Thư viện đang kết nối chậm."),
             loadAdminCollections(),
             loadArchiveUsers(),
