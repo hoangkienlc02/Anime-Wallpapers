@@ -8,7 +8,6 @@ let filteredImages = [];
 let currentPage = 1;
 let sortMode = "featured";
 let activeDetailItem = null;
-let slideshowTimer = null;
 let libraryCollections = [];
 const cloudFavoriteIds = new Set();
 const cloudDownloadIds = new Set();
@@ -204,10 +203,6 @@ function refreshDetailPanel() {
     favoriteButton.innerHTML = `<span class="material-icons-outlined">${favorite ? "bookmark" : "bookmark_border"}</span> ${favorite ? "ĐÃ LƯU YÊU THÍCH" : "LƯU YÊU THÍCH"}`;
     favoriteButton.classList.toggle("is-active", favorite);
     document.getElementById("detailOpenOriginal").href = item.url;
-    const slideshowButton = document.getElementById("detailSlideshow");
-    const isPlaying = Boolean(slideshowTimer);
-    slideshowButton.innerHTML = `<span class="material-icons-outlined">${isPlaying ? "pause" : "slideshow"}</span> ${isPlaying ? "DỪNG SLIDESHOW" : "SLIDESHOW"}`;
-    slideshowButton.classList.toggle("is-active", isPlaying);
     renderRelatedMedia(item);
 }
 
@@ -256,39 +251,6 @@ function renderRelatedMedia(item) {
     });
 }
 
-function stopSlideshow() {
-    if (!slideshowTimer) return;
-    clearInterval(slideshowTimer);
-    slideshowTimer = null;
-    if (activeDetailItem) refreshDetailPanel();
-}
-
-function showNextSlideshowItem() {
-    const candidates = filteredImages.filter((item) => !isVideo(item));
-    const images = candidates.length ? candidates : allImages.filter((item) => !isVideo(item));
-    if (images.length < 2 || !activeDetailItem) return stopSlideshow();
-    const currentIndex = images.findIndex((item) => item.id === activeDetailItem.id);
-    const next = images[(currentIndex + 1 + images.length) % images.length];
-    activeDetailItem = next;
-    document.getElementById("lightbox-img").src = next.url;
-    trackInteraction(next, "views");
-    refreshDetailPanel();
-    hydrateDetailTechnicalMetadata(next);
-}
-
-function toggleSlideshow() {
-    if (slideshowTimer) {
-        stopSlideshow();
-        showToast("Đã dừng slideshow.");
-        return;
-    }
-    const images = filteredImages.filter((item) => !isVideo(item));
-    if (images.length < 2) return showToast("Cần ít nhất 2 ảnh để chạy slideshow.", "error");
-    slideshowTimer = setInterval(showNextSlideshowItem, 4500);
-    refreshDetailPanel();
-    showToast("Slideshow đang chạy, mỗi ảnh 4,5 giây.");
-}
-
 async function hydrateDetailTechnicalMetadata(item) {
     if (item.width && item.height && item.fileSizeBytes) return;
     const updates = {};
@@ -329,7 +291,6 @@ window.openMediaDetails = (item) => {
 };
 
 window.closeMediaDetails = () => {
-    stopSlideshow();
     document.getElementById("lightbox").style.display = "none";
     activeDetailItem = null;
     if (location.pathname.startsWith("/wallpaper/")) {
@@ -677,14 +638,6 @@ window.filterImages = () => {
     navigateTo(term ? `/search?q=${encodeURIComponent(term)}` : "/wallpapers", { replace: true });
 };
 
-function openRandomWallpaper() {
-    const candidates = filteredImages.filter((item) => !isVideo(item));
-    if (!candidates.length) return showToast("Không có ảnh nào phù hợp với bộ lọc hiện tại.", "error");
-    const alternatives = candidates.filter((item) => item.id !== activeDetailItem?.id);
-    const item = (alternatives.length ? alternatives : candidates)[Math.floor(Math.random() * (alternatives.length || candidates.length))];
-    window.openWallpaperPage(item);
-}
-
 window.sortGallery = (mode, button) => {
     sortMode = mode;
     document.querySelectorAll(".sort-tab").forEach((tab) => tab.classList.remove("active"));
@@ -963,8 +916,6 @@ document.getElementById("detailShare").addEventListener("click", async () => {
 });
 document.getElementById("detailLike").addEventListener("click", toggleLike);
 document.getElementById("detailFavorite").addEventListener("click", () => toggleFavorite());
-document.getElementById("detailSlideshow").addEventListener("click", toggleSlideshow);
-document.getElementById("randomWallpaper").addEventListener("click", openRandomWallpaper);
 document.getElementById("detailOpenOriginal").addEventListener("click", () => {
     if (activeDetailItem) trackInteraction(activeDetailItem, "views");
 });
