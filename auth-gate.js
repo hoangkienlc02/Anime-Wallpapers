@@ -90,7 +90,7 @@ export function protectPage(onReady) {
     const accountLabel = document.getElementById("accountLabel");
     const passwordToggleButtons = [...document.querySelectorAll("[data-password-toggle]")];
     const registrationAllowed = !document.body.classList.contains("admin-page");
-    let authMode = "login", hasStarted = false, authSubmissionInFlight = false, registrationInFlight = false, verificationLastSentAt = 0, revealInFlight = null;
+    let authMode = "login", startedForUid = null, authSubmissionInFlight = false, registrationInFlight = false, verificationLastSentAt = 0, revealInFlight = null;
 
     const setError = (message = "") => { error.textContent = message; };
     function showVerificationNotice(message, { canResend = false } = {}) {
@@ -192,7 +192,13 @@ export function protectPage(onReady) {
             appShell.dataset.userRole = currentUser.uid === OWNER_UID ? "admin" : "client";
             accountLabel.textContent = currentUser.email || "Đã đăng nhập";
             await finishSessionCheck();
-            if (!hasStarted) { hasStarted = true; await onReady(currentUser); }
+            // The same page can be reused after sign-out. Initialise again
+            // whenever the authenticated UID changes so no prior account's
+            // gallery or personal state is shown to the next account.
+            if (startedForUid !== currentUser.uid) {
+                startedForUid = currentUser.uid;
+                await onReady(currentUser);
+            }
         })().catch(async (err) => {
             console.warn("Could not refresh the verified session:", err.code || err.message);
             appShell.hidden = true;
@@ -303,11 +309,14 @@ export function protectPage(onReady) {
             // Replace the current history entry after a sign-out. Pressing
             // Back cannot restore a protected tag/detail route for login.
             clearSignedOutRoute({ redirect: true });
+            startedForUid = null;
+            window.dispatchEvent(new CustomEvent("anime-auth-user-changed", { detail: { uid: null } }));
             appShell.hidden = true;
             gate.hidden = false;
             await finishSessionCheck();
             return;
         }
+        window.dispatchEvent(new CustomEvent("anime-auth-user-changed", { detail: { uid: user.uid } }));
         await revealApp(user);
     });
 }

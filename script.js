@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { addDoc, collection, collectionGroup, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { auth, db } from "./firebase-config.js";
 import { getIdToken, protectPage } from "./auth-gate.js";
 
@@ -9,6 +9,7 @@ let selectedFiles = [];
 let metadataDrafts = [];
 let selectedPreviewIndex = 0;
 let activeDetailItem = null;
+let lastModalTrigger = null;
 const selectedAdminIds = new Set();
 let adminCollections = [];
 let archiveUsers = [];
@@ -18,6 +19,7 @@ let collectionPickerPage = 1;
 const collectionPickerPerPage = 20;
 const itemsPerPage = 20;
 const PAGE_SKELETON_DURATION_MS = 240;
+const ADMIN_LOAD_TIMEOUT_MS = 12000;
 let paginationLoading = false;
 
 const showToast = (message, type = "success") => {
@@ -30,6 +32,36 @@ const showToast = (message, type = "success") => {
     document.getElementById("toast-container").appendChild(toast);
     setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 300); }, 2700);
 };
+
+function withTimeout(promise, timeoutMs, message) {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
+function focusModal(targetId) {
+    lastModalTrigger = document.activeElement;
+    document.getElementById(targetId).style.display = "flex";
+}
+
+function restoreModalFocus() {
+    if (lastModalTrigger?.isConnected) lastModalTrigger.focus();
+    lastModalTrigger = null;
+}
+
+function trapAdminModalFocus(event) {
+    if (event.key !== "Tab") return;
+    const modal = [...document.querySelectorAll(".lightbox")].find((element) => element.style.display === "flex");
+    if (!modal) return;
+    const focusable = [...modal.querySelectorAll("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])")]
+        .filter((element) => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
 
 function getOptimizedUrl(url) {
     return url?.includes("cloudinary") ? url.replace("/upload/", "/upload/f_auto,q_auto,w_800/") : url;
@@ -161,6 +193,26 @@ async function loadArchiveUsers() {
     }
 }
 
+async function loadInteractionStats() {
+    const createStats = () => ({ views: 0, downloads: 0, likes: 0 });
+    const stats = new Map();
+    const add = (snapshot, field) => snapshot.docs.forEach((entry) => {
+        const photoId = entry.data().photoId || entry.id;
+        const current = stats.get(photoId) || createStats();
+        current[field] += 1;
+        stats.set(photoId, current);
+    });
+    const [views, downloads, likes] = await Promise.all([
+        getDocs(collectionGroup(db, "views")),
+        getDocs(collectionGroup(db, "downloads")),
+        getDocs(collectionGroup(db, "likes"))
+    ]);
+    add(views, "views");
+    add(downloads, "downloads");
+    add(likes, "likes");
+    return stats;
+}
+
 function renderUserManagement() {
     const list = document.getElementById("adminUserList");
     const count = document.getElementById("adminUserCount");
@@ -220,11 +272,13 @@ function renderUserManagement() {
                     email: user.email || "",
                     deletedAt: serverTimestamp()
                 });
-                const [favorites, downloads] = await Promise.all([
+                const [favorites, downloads, likes, views] = await Promise.all([
                     getDocs(collection(db, "users", user.id, "favorites")),
-                    getDocs(collection(db, "users", user.id, "downloads"))
+                    getDocs(collection(db, "users", user.id, "downloads")),
+                    getDocs(collection(db, "users", user.id, "likes")),
+                    getDocs(collection(db, "users", user.id, "views"))
                 ]);
-                await Promise.all([...favorites.docs, ...downloads.docs].map((entry) => deleteDoc(entry.ref)));
+                await Promise.all([...favorites.docs, ...downloads.docs, ...likes.docs, ...views.docs].map((entry) => deleteDoc(entry.ref)));
                 await deleteDoc(doc(db, "users", user.id));
                 archiveUsers = archiveUsers.filter((entry) => entry.id !== user.id);
                 renderUserManagement();
@@ -403,8 +457,9 @@ function openCollectionPicker(collectionItem) {
     collectionPickerPage = 1;
     document.getElementById("collectionPickerTitle").textContent = collectionItem.name;
     document.getElementById("collectionPickerSearch").value = "";
-    document.getElementById("collectionPickerModal").style.display = "flex";
+    focusModal("collectionPickerModal");
     renderCollectionPicker();
+    document.getElementById("collectionPickerSearch").focus();
 }
 
 function closeCollectionPicker() {
@@ -412,6 +467,7 @@ function closeCollectionPicker() {
     activeCollectionPicker = null;
     collectionPickerIds.clear();
     collectionPickerPage = 1;
+    restoreModalFocus();
 }
 window.closeCollectionPicker = closeCollectionPicker;
 
@@ -530,15 +586,18 @@ function openAdjacentDetail(direction) {
 }
 
 window.openMediaDetails = (item) => {
+    if (!activeDetailItem) lastModalTrigger = document.activeElement;
     activeDetailItem = item;
     document.getElementById("lightbox-img").src = item.url;
     refreshDetailPanel();
     document.getElementById("lightbox").style.display = "flex";
+    document.getElementById("detailClose").focus();
 };
 
 window.closeMediaDetails = () => {
     document.getElementById("lightbox").style.display = "none";
     activeDetailItem = null;
+    restoreModalFocus();
 };
 
 async function secureApi(path, payload) {
@@ -985,7 +1044,8 @@ function openBulkEditModal() {
     if (!selectedAdminIds.size) return;
     document.getElementById("bulkEditHint").textContent = `Áp dụng cho ${selectedAdminIds.size} tệp. Chỉ các ô có nhập dữ liệu mới thay đổi.`;
     ["bulkDeviceInput", "bulkThemeInput", "bulkNameInput", "bulkSeriesInput", "bulkArtistInput"].forEach((id) => { document.getElementById(id).value = ""; });
-    document.getElementById("bulkEditModal").style.display = "flex";
+    focusModal("bulkEditModal");
+    document.getElementById("bulkDeviceInput").focus();
 }
 
 async function saveBulkEdit() {
@@ -1006,6 +1066,7 @@ async function saveBulkEdit() {
         }
         selectedAdminIds.clear();
         document.getElementById("bulkEditModal").style.display = "none";
+        restoreModalFocus();
         showToast(`Đã cập nhật ${targets.length} tệp.`);
         await loadImages();
     } catch (error) {
@@ -1067,12 +1128,26 @@ async function loadImages() {
     const gallery = document.getElementById("gallery");
     renderGallerySkeleton();
     try {
-        const [snapshot] = await Promise.all([
-            getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
+        const [snapshot, interactionStats] = await Promise.all([
+            withTimeout(getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))), ADMIN_LOAD_TIMEOUT_MS, "Thư viện đang kết nối chậm."),
             loadAdminCollections(),
-            loadArchiveUsers()
+            loadArchiveUsers(),
+            loadInteractionStats().catch((error) => {
+                console.warn("Không thể tổng hợp tương tác người dùng:", error);
+                return new Map();
+            })
         ]);
-        allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+        allImages = snapshot.docs.map((document) => {
+            const item = { id: document.id, ...document.data() };
+            const interaction = interactionStats.get(item.id);
+            if (!interaction) return item;
+            return {
+                ...item,
+                views: (Number(item.views) || 0) + interaction.views,
+                downloads: (Number(item.downloads) || 0) + interaction.downloads,
+                likes: (Number(item.likes) || 0) + interaction.likes
+            };
+        });
         filteredImages = [...allImages];
         renderDashboard();
         renderAdminCollections();
@@ -1082,7 +1157,9 @@ async function loadImages() {
         loadCloudinaryUsage();
     } catch (error) {
         console.error(error);
-        gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra Firebase Rules.";
+        gallery.textContent = error.message === "Thư viện đang kết nối chậm."
+            ? "Thư viện đang kết nối chậm. Hãy kiểm tra mạng rồi tải lại trang."
+            : "Không thể tải thư viện. Hãy kiểm tra Firebase Rules.";
     }
 }
 
@@ -1300,7 +1377,10 @@ document.getElementById("clearAdminSelection").addEventListener("click", () => {
     goToPage(currentPage, { scroll: false });
 });
 document.getElementById("bulkEditButton").addEventListener("click", openBulkEditModal);
-document.getElementById("bulkEditCancel").addEventListener("click", () => { document.getElementById("bulkEditModal").style.display = "none"; });
+document.getElementById("bulkEditCancel").addEventListener("click", () => {
+    document.getElementById("bulkEditModal").style.display = "none";
+    restoreModalFocus();
+});
 document.getElementById("bulkEditSave").addEventListener("click", saveBulkEdit);
 document.getElementById("importMetadataButton").addEventListener("click", () => document.getElementById("metadataImportInput").click());
 document.getElementById("metadataImportInput").addEventListener("change", async (event) => {
@@ -1399,8 +1479,14 @@ document.getElementById("collectionPickerSearch").addEventListener("input", () =
     renderCollectionPicker();
 });
 document.addEventListener("keydown", (event) => {
+    trapAdminModalFocus(event);
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "Escape" && activeDetailItem) return window.closeMediaDetails();
+    if (event.key === "Escape" && activeCollectionPicker) return closeCollectionPicker();
+    if (event.key === "Escape" && document.getElementById("bulkEditModal").style.display === "flex") {
+        document.getElementById("bulkEditModal").style.display = "none";
+        return restoreModalFocus();
+    }
     if (activeDetailItem && event.key === "ArrowRight") { event.preventDefault(); return openAdjacentDetail(1); }
     if (activeDetailItem && event.key === "ArrowLeft") { event.preventDefault(); return openAdjacentDetail(-1); }
     if (event.key === "ArrowRight") goToPage(currentPage + 1);

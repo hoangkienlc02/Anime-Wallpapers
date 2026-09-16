@@ -58,6 +58,14 @@ service cloud.firestore {
       match /downloads/{photoId} {
         allow read, create, update, delete: if isSelf(userId) || isOwner();
       }
+
+      match /likes/{photoId} {
+        allow read, create, update, delete: if isSelf(userId) || isOwner();
+      }
+
+      match /views/{photoId} {
+        allow read, create, update, delete: if isSelf(userId) || isOwner();
+      }
     }
 
     match /deletedUsers/{userId} {

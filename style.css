@@ -58,6 +58,7 @@ button { color: inherit; }
 .login-error { min-height: 1.5em; color: #ff856e; font-size: .85rem; line-height: 1.45; margin: 20px 0 10px; }
 
 .site-header { min-height: 93px; display: flex; align-items: center; gap: 42px; padding: 18px clamp(22px, 4vw, 52px); border-bottom: 1px solid var(--line); background: rgba(4, 22, 23, .86); backdrop-filter: blur(18px); position: sticky; top: 0; z-index: 100; }
+.mobile-nav, .mobile-menu-toggle { display: none; }
 .brand { color: var(--text); display: inline-flex; align-items: center; flex: none; gap: 11px; text-decoration: none; }
 .brand-mark { display: grid; place-items: center; width: 42px; height: 42px; font-family: "Barlow Condensed", sans-serif; color: #fff; font-size: 1.05rem; font-weight: 800; letter-spacing: -.05em; background: var(--accent); transform: skew(-8deg); }
 .brand-wordmark { font-family: "Barlow Condensed", sans-serif; font-size: 1.37rem; letter-spacing: .015em; font-weight: 700; white-space: nowrap; }
@@ -359,6 +360,10 @@ button { color: inherit; }
 @media (max-width: 900px) {
     .site-header { gap: 20px; }
     .site-nav { display: none; }
+    .mobile-menu-toggle { display: grid; }
+    .mobile-nav:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: rgba(4, 22, 23, .98); position: sticky; top: 93px; z-index: 99; }
+    .mobile-nav .nav-link { min-height: 42px; display: flex; align-items: center; padding: 0 12px; border: 1px solid transparent; font-size: .83rem; }
+    .mobile-nav .nav-link.active { border-color: var(--accent); color: #fff; background: rgba(255, 92, 66, .12); }
     .account-label { display: none; }
     .hero { min-height: 270px; }
     .archive-hero { min-height: 290px; }
@@ -375,6 +380,7 @@ button { color: inherit; }
 @media (max-width: 600px) {
     .site-header { min-height: 70px; padding: 12px 16px; }
     .admin-quick-nav { top: 70px; padding: 8px 16px; }
+    .mobile-nav:not([hidden]) { top: 70px; }
     .admin-scroll-target { scroll-margin-top: 126px; }
     .brand-mark { width: 34px; height: 34px; font-size: .9rem; }
     .brand-wordmark { font-size: 1rem; }
@@ -440,4 +446,8 @@ button { color: inherit; }
     .collection-dialog { margin: auto 0; padding: 32px 20px 20px; }
     .new-collection-form { grid-template-columns: 1fr; }
     .new-collection-form .btn-primary { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

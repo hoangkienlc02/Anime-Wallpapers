@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, increment, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { auth, db } from "./firebase-config.js";
 import { protectPage } from "./auth-gate.js";
@@ -8,18 +8,60 @@ let filteredImages = [];
 let currentPage = 1;
 let sortMode = "featured";
 let activeDetailItem = null;
+let lastDetailTrigger = null;
 let libraryCollections = [];
 let unsubscribePhotos = null;
+let activeLibraryUserUid = null;
+let initialSnapshotTimer = null;
 const cloudFavoriteIds = new Set();
 const cloudDownloadIds = new Set();
+const cloudLikeIds = new Set();
+const cloudViewIds = new Set();
 const selectedImageIds = new Set();
 const advancedFilters = { device: "", media: "", orientation: "", resolution: "", theme: "", character: "", series: "", artist: "" };
 const itemsPerPage = 20;
 const PAGE_SKELETON_DURATION_MS = 240;
+const LIBRARY_LOAD_TIMEOUT_MS = 12000;
 let paginationLoading = false;
 
 function isAdminSession() {
     return document.getElementById("appShell")?.dataset.userRole === "admin";
+}
+
+function personalStorageKey(type, photoId) {
+    const uid = auth.currentUser?.uid;
+    return uid ? `anime-wallpaper:${uid}:${type}:${photoId}` : "";
+}
+
+function hasPersonalLocalState(type, photoId) {
+    const key = personalStorageKey(type, photoId);
+    return Boolean(key) && localStorage.getItem(key) === "true";
+}
+
+function setPersonalLocalState(type, photoId, enabled) {
+    const key = personalStorageKey(type, photoId);
+    if (key) localStorage.setItem(key, String(enabled));
+}
+
+function clearLibrarySessionState() {
+    unsubscribePhotos?.();
+    unsubscribePhotos = null;
+    if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
+    initialSnapshotTimer = null;
+    activeLibraryUserUid = null;
+    allImages = [];
+    filteredImages = [];
+    currentPage = 1;
+    paginationLoading = false;
+    libraryCollections = [];
+    cloudFavoriteIds.clear();
+    cloudDownloadIds.clear();
+    cloudLikeIds.clear();
+    cloudViewIds.clear();
+    selectedImageIds.clear();
+    activeDetailItem = null;
+    const lightbox = document.getElementById("lightbox");
+    if (lightbox) lightbox.style.display = "none";
 }
 
 function validateNewPassword(password) {
@@ -127,21 +169,25 @@ function applySort(items) {
 
 function updateResultCount() {
     const resultCount = document.getElementById("galleryResultCount");
-    if (resultCount) resultCount.textContent = `${filteredImages.length} ẢNH`;
+    if (!resultCount) return;
+    const videos = filteredImages.filter(isVideo).length;
+    const images = filteredImages.length - videos;
+    resultCount.textContent = videos ? `${filteredImages.length} NỘI DUNG · ${images} ẢNH · ${videos} VIDEO` : `${images} ẢNH`;
 }
 
 async function trackInteraction(item, field) {
-    item[field] = (Number(item[field]) || 0) + 1;
+    if (field === "views") {
+        if (cloudViewIds.has(item.id)) return;
+        cloudViewIds.add(item.id);
+        item.views = (Number(item.views) || 0) + 1;
+        savePersonalItem("views", item).catch((error) => console.warn("Không thể đồng bộ lượt xem:", error));
+        return;
+    }
     if (field === "downloads") {
-        localStorage.setItem(`anime-wallpaper-downloaded:${item.id}`, "true");
+        item.downloads = (Number(item.downloads) || 0) + 1;
+        setPersonalLocalState("downloaded", item.id, true);
         cloudDownloadIds.add(item.id);
         savePersonalItem("downloads", item).catch((error) => console.warn("Không thể đồng bộ lịch sử tải:", error));
-    }
-    if (!isAdminSession()) return;
-    try {
-        await updateDoc(doc(db, "photos", item.id), { [field]: increment(1) });
-    } catch (error) {
-        console.warn(`Không thể lưu lượt ${field}:`, error);
     }
 }
 
@@ -154,15 +200,15 @@ function formatBytes(bytes) {
 }
 
 function isLiked(item) {
-    return localStorage.getItem(`anime-wallpaper-liked:${item.id}`) === "true";
+    return cloudLikeIds.has(item.id) || hasPersonalLocalState("liked", item.id);
 }
 
 function isFavorite(item) {
-    return cloudFavoriteIds.has(item.id) || localStorage.getItem(`anime-wallpaper-favorite:${item.id}`) === "true";
+    return cloudFavoriteIds.has(item.id) || hasPersonalLocalState("favorite", item.id);
 }
 
 function isDownloaded(item) {
-    return cloudDownloadIds.has(item.id) || localStorage.getItem(`anime-wallpaper-downloaded:${item.id}`) === "true";
+    return cloudDownloadIds.has(item.id) || hasPersonalLocalState("downloaded", item.id);
 }
 
 async function savePersonalItem(bucket, item) {
@@ -174,12 +220,18 @@ async function savePersonalItem(bucket, item) {
 async function loadPersonalData(user) {
     cloudFavoriteIds.clear();
     cloudDownloadIds.clear();
-    const [favorites, downloads] = await Promise.all([
+    cloudLikeIds.clear();
+    cloudViewIds.clear();
+    const [favorites, downloads, likes, views] = await Promise.all([
         getDocs(collection(db, "users", user.uid, "favorites")),
-        getDocs(collection(db, "users", user.uid, "downloads"))
+        getDocs(collection(db, "users", user.uid, "downloads")),
+        getDocs(collection(db, "users", user.uid, "likes")),
+        getDocs(collection(db, "users", user.uid, "views"))
     ]);
     favorites.docs.forEach((entry) => cloudFavoriteIds.add(entry.id));
     downloads.docs.forEach((entry) => cloudDownloadIds.add(entry.id));
+    likes.docs.forEach((entry) => cloudLikeIds.add(entry.id));
+    views.docs.forEach((entry) => cloudViewIds.add(entry.id));
 }
 
 function refreshDetailPanel() {
@@ -268,10 +320,12 @@ async function hydrateDetailTechnicalMetadata(item) {
 }
 
 window.openMediaDetails = (item) => {
+    if (!activeDetailItem) lastDetailTrigger = document.activeElement;
     activeDetailItem = item;
     document.getElementById("lightbox-img").src = item.url;
     refreshDetailPanel();
     document.getElementById("lightbox").style.display = "flex";
+    document.getElementById("detailClose").focus();
     hydrateDetailTechnicalMetadata(item);
 };
 
@@ -283,6 +337,8 @@ window.closeMediaDetails = () => {
         history.replaceState({}, "", "/wallpapers");
         renderRoute();
     }
+    if (lastDetailTrigger?.isConnected) lastDetailTrigger.focus();
+    lastDetailTrigger = null;
 };
 
 window.openWallpaperPage = (item) => {
@@ -292,23 +348,25 @@ window.openWallpaperPage = (item) => {
 
 async function toggleLike() {
     const item = activeDetailItem;
-    if (!item) return;
+    const user = auth.currentUser;
+    if (!item || !user) return;
     const liked = isLiked(item);
     item.likes = Math.max(0, (Number(item.likes) || 0) + (liked ? -1 : 1));
-    localStorage.setItem(`anime-wallpaper-liked:${item.id}`, String(!liked));
-    refreshDetailPanel();
-    if (!isAdminSession()) return;
-    try {
-        await updateDoc(doc(db, "photos", item.id), { likes: increment(liked ? -1 : 1) });
-    } catch (error) {
-        console.warn("Không thể lưu lượt thích:", error);
+    setPersonalLocalState("liked", item.id, !liked);
+    if (liked) {
+        cloudLikeIds.delete(item.id);
+        deleteDoc(doc(db, "users", user.uid, "likes", item.id)).catch((error) => console.warn("Không thể bỏ thích cloud:", error));
+    } else {
+        cloudLikeIds.add(item.id);
+        savePersonalItem("likes", item).catch((error) => console.warn("Không thể đồng bộ lượt thích:", error));
     }
+    refreshDetailPanel();
 }
 
 function toggleFavorite(item = activeDetailItem) {
     if (!item) return;
     const favorite = !isFavorite(item);
-    localStorage.setItem(`anime-wallpaper-favorite:${item.id}`, String(favorite));
+    setPersonalLocalState("favorite", item.id, favorite);
     if (favorite) {
         cloudFavoriteIds.add(item.id);
         savePersonalItem("favorites", item).catch((error) => console.warn("Không thể đồng bộ yêu thích:", error));
@@ -626,7 +684,18 @@ function renderRoute(options = {}) {
 function navigateTo(path, { replace = false } = {}) {
     if (replace) history.replaceState({}, "", path);
     else history.pushState({}, "", path);
+    closeMobileNav();
     renderRoute();
+}
+
+function closeMobileNav() {
+    const nav = document.getElementById("mobileNav");
+    const toggle = document.getElementById("mobileMenuToggle");
+    if (!nav || !toggle) return;
+    nav.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Mở menu điều hướng");
+    toggle.querySelector(".material-icons-outlined").textContent = "menu";
 }
 
 window.filterByDynamicTag = (tag) => {
@@ -820,35 +889,71 @@ async function downloadSelectedAsZip() {
     }
 }
 
+function trapDetailFocus(event) {
+    if (event.key !== "Tab" || !activeDetailItem) return;
+    const focusable = [...document.querySelectorAll("#lightbox button:not(:disabled), #lightbox a[href], #lightbox [tabindex]:not([tabindex='-1'])")]
+        .filter((element) => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
 async function loadImages(user) {
     const gallery = document.getElementById("gallery");
+    const userChanged = activeLibraryUserUid !== user.uid;
+    activeLibraryUserUid = user.uid;
+    unsubscribePhotos?.();
+    unsubscribePhotos = null;
+    if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
+    if (userChanged) {
+        allImages = [];
+        filteredImages = [];
+        libraryCollections = [];
+        selectedImageIds.clear();
+    }
     renderGallerySkeleton();
+    let receivedFirstSnapshot = false;
+    const photosQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
+    initialSnapshotTimer = setTimeout(() => {
+        if (!receivedFirstSnapshot && activeLibraryUserUid === user.uid) {
+            gallery.textContent = "Thư viện đang kết nối chậm. Hãy kiểm tra mạng rồi tải lại trang.";
+        }
+    }, LIBRARY_LOAD_TIMEOUT_MS);
+    unsubscribePhotos = onSnapshot(photosQuery, (snapshot) => {
+        if (activeLibraryUserUid !== user.uid) return;
+        try {
+            const hasLiveChanges = receivedFirstSnapshot && snapshot.docChanges().length > 0;
+            allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+            populateAdvancedFilters();
+            syncAdvancedFilterControls();
+            renderFilterTags();
+            renderRoute({ preservePage: receivedFirstSnapshot });
+            if (hasLiveChanges) showToast("Thư viện vừa được cập nhật.");
+            receivedFirstSnapshot = true;
+            if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
+            initialSnapshotTimer = null;
+        } catch (error) {
+            console.error("Không thể hiển thị thư viện:", error);
+            gallery.textContent = "Không thể hiển thị thư viện. Hãy tải lại trang.";
+        }
+    }, (error) => {
+        if (activeLibraryUserUid !== user.uid) return;
+        if (initialSnapshotTimer) clearTimeout(initialSnapshotTimer);
+        initialSnapshotTimer = null;
+        console.error("Không thể đồng bộ thư viện realtime:", error);
+        gallery.textContent = "Không thể đồng bộ thư viện. Hãy kiểm tra quyền truy cập Firebase.";
+    });
     try {
-        await Promise.all([loadCollections(), loadPersonalData(user)]);
-        unsubscribePhotos?.();
-        let receivedFirstSnapshot = false;
-        const photosQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
-        unsubscribePhotos = onSnapshot(photosQuery, (snapshot) => {
-            try {
-                const hasLiveChanges = receivedFirstSnapshot && snapshot.docChanges().length > 0;
-                allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-                populateAdvancedFilters();
-                syncAdvancedFilterControls();
-                renderFilterTags();
-                renderRoute({ preservePage: receivedFirstSnapshot });
-                if (hasLiveChanges) showToast("Thư viện vừa được cập nhật.");
-                receivedFirstSnapshot = true;
-            } catch (error) {
-                console.error("Không thể hiển thị thư viện:", error);
-                gallery.textContent = "Không thể hiển thị thư viện. Hãy tải lại trang.";
-            }
-        }, (error) => {
-            console.error("Không thể đồng bộ thư viện realtime:", error);
-            gallery.textContent = "Không thể đồng bộ thư viện. Hãy kiểm tra quyền truy cập Firebase.";
-        });
+        const results = await Promise.allSettled([loadCollections(), loadPersonalData(user)]);
+        if (activeLibraryUserUid !== user.uid) return;
+        if (results.some((result) => result.status === "rejected")) {
+            console.warn("Không thể đồng bộ một phần dữ liệu cá nhân hoặc album:", results);
+            showToast("Một phần dữ liệu cá nhân chưa đồng bộ được. Thư viện ảnh vẫn hoạt động.", "error");
+        }
+        if (receivedFirstSnapshot) renderRoute({ preservePage: true });
     } catch (error) {
         console.error(error);
-        gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra quyền truy cập Firebase.";
     }
 }
 
@@ -900,6 +1005,7 @@ const backToTop = document.getElementById("backToTop");
 window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });
 backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 document.addEventListener("keydown", (event) => {
+    trapDetailFocus(event);
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "Escape" && activeDetailItem) return window.closeMediaDetails();
     if (activeDetailItem && event.key === "ArrowRight") { event.preventDefault(); return openAdjacentDetail(1); }
@@ -914,6 +1020,15 @@ document.querySelectorAll("[data-router-link]").forEach((link) => {
         event.preventDefault();
         navigateTo(link.getAttribute("href"));
     });
+});
+document.getElementById("mobileMenuToggle")?.addEventListener("click", () => {
+    const nav = document.getElementById("mobileNav");
+    const toggle = document.getElementById("mobileMenuToggle");
+    const opening = nav.hidden;
+    nav.hidden = !opening;
+    toggle.setAttribute("aria-expanded", String(opening));
+    toggle.setAttribute("aria-label", opening ? "Đóng menu điều hướng" : "Mở menu điều hướng");
+    toggle.querySelector(".material-icons-outlined").textContent = opening ? "close" : "menu";
 });
 document.getElementById("detailClose").addEventListener("click", window.closeMediaDetails);
 document.getElementById("detailPrevious").addEventListener("click", (event) => { event.stopPropagation(); openAdjacentDetail(-1); });
@@ -969,5 +1084,8 @@ document.getElementById("clearSelection").addEventListener("click", () => {
 });
 window.addEventListener("popstate", renderRoute);
 window.addEventListener("beforeunload", () => unsubscribePhotos?.());
+window.addEventListener("anime-auth-user-changed", (event) => {
+    if (!event.detail?.uid) clearLibrarySessionState();
+});
 
 protectPage(loadImages);
