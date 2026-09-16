@@ -66,6 +66,48 @@ function renderDashboard() {
     document.getElementById("statTopLikes").textContent = describeTop("likes", "Thích");
 }
 
+function formatUsageValue(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return number.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+}
+
+function usageDetail(metric, formatter = formatUsageValue) {
+    if (metric?.usage == null) return "Cloudinary không trả về số liệu này";
+    if (metric.limit == null) return `Đã dùng ${formatter(metric.usage)}`;
+    return `Đã dùng ${formatter(metric.usage)} / ${formatter(metric.limit)}`;
+}
+
+async function loadCloudinaryUsage() {
+    const refreshButton = document.getElementById("refreshCloudinaryUsage");
+    refreshButton.disabled = true;
+    try {
+        const usage = await secureApi("/api/cloudinary-usage", {});
+        const creditUsage = usage.credits?.usage;
+        const creditLimit = usage.credits?.limit;
+        const remainingCredits = creditUsage != null && creditLimit != null
+            ? Math.max(0, creditLimit - creditUsage)
+            : null;
+        document.getElementById("cloudinaryPlan").textContent = `${usage.plan || "Cloudinary"} · QUOTA HIỆN TẠI`;
+        document.getElementById("cloudinaryCredits").textContent = remainingCredits == null ? "—" : `${formatUsageValue(remainingCredits)} CREDITS`;
+        document.getElementById("cloudinaryCreditsDetail").textContent = usageDetail(usage.credits);
+        document.getElementById("cloudinaryStorage").textContent = usage.storage?.usage == null ? "—" : formatBytes(usage.storage.usage);
+        document.getElementById("cloudinaryStorageDetail").textContent = usageDetail(usage.storage, formatBytes);
+        document.getElementById("cloudinaryBandwidth").textContent = usage.bandwidth?.usage == null ? "—" : formatBytes(usage.bandwidth.usage);
+        document.getElementById("cloudinaryBandwidthDetail").textContent = usageDetail(usage.bandwidth, formatBytes);
+        document.getElementById("cloudinaryResources").textContent = usage.resources == null ? "—" : formatUsageValue(usage.resources);
+        document.getElementById("cloudinaryUpdated").textContent = usage.updatedAt
+            ? `Cập nhật: ${new Date(usage.updatedAt).toLocaleString("vi-VN")}`
+            : "Số liệu Cloudinary cập nhật định kỳ";
+    } catch (error) {
+        console.error("Không thể tải Cloudinary usage:", error);
+        document.getElementById("cloudinaryPlan").textContent = "KHÔNG THỂ TẢI CLOUDINARY USAGE";
+        document.getElementById("cloudinaryCreditsDetail").textContent = "Kiểm tra Cloudinary API key/secret trên Vercel";
+    } finally {
+        refreshButton.disabled = false;
+    }
+}
+
 function updateAdminSelectionControls() {
     const count = selectedAdminIds.size;
     document.getElementById("adminSelectionCount").textContent = count ? `${count} TỆP ĐÃ CHỌN` : "CHƯA CHỌN TỆP";
@@ -878,6 +920,7 @@ async function loadImages() {
         renderAdminCollections();
         renderFilterTags();
         goToPage(1, { scroll: false });
+        loadCloudinaryUsage();
     } catch (error) {
         console.error(error);
         gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra Firebase Rules.";
@@ -1106,6 +1149,7 @@ document.getElementById("metadataImportInput").addEventListener("change", async 
     if (file) await restoreMetadataFile(file);
     event.target.value = "";
 });
+document.getElementById("refreshCloudinaryUsage").addEventListener("click", loadCloudinaryUsage);
 
 window.exportMetadata = () => {
     const metadataFields = ["id", "publicId", "type", "device", "theme", "subName", "seriesName", "artistName", "favorite", "views", "downloads", "likes", "width", "height", "fileSizeBytes", "fileHash"];

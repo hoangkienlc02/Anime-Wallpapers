@@ -67,6 +67,7 @@ button { color: inherit; }
 [data-theme="light"] .admin-quick-nav a { color: #294947; border-color: rgba(7, 38, 39, .25); }
 [data-theme="light"] .admin-quick-nav a:hover, [data-theme="light"] .admin-quick-nav a:focus { color: #fff; }
 [data-theme="light"] .admin-page .dashboard-card,
+[data-theme="light"] .admin-page .cloudinary-usage,
 [data-theme="light"] .admin-page .collection-console,
 [data-theme="light"] .admin-page .file-metadata-card,
 [data-theme="light"] .admin-page .admin-collection-card { background: rgba(255, 255, 252, .82); }
@@ -241,6 +242,15 @@ button { color: inherit; }
 .dashboard-card > strong { display: block; margin-top: 8px; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: clamp(2.2rem, 3vw, 3.3rem); font-weight: 800; line-height: .9; }
 .dashboard-card small { display: block; margin-top: 10px; color: var(--muted); font-size: .73rem; line-height: 1.35; }
 .dashboard-top p { margin: 7px 0 0; overflow: hidden; color: var(--text); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+.cloudinary-usage { margin-top: 12px; padding: 18px; border: 1px solid var(--line); background: rgba(12, 41, 43, .62); }
+.cloudinary-usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.cloudinary-usage-heading h2 { margin: 5px 0 0; font-family: "Barlow Condensed", sans-serif; font-size: 1.55rem; line-height: .95; letter-spacing: .03em; }
+.cloudinary-usage-heading .secondary-action { min-height: 36px; flex: none; padding: 0 10px; font-size: .78rem; }
+.cloudinary-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding-top: 16px; }
+.cloudinary-metrics article { min-width: 0; }
+.cloudinary-metrics span { color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .73rem; font-weight: 700; letter-spacing: .1em; }
+.cloudinary-metrics strong { display: block; margin-top: 6px; overflow: hidden; color: var(--text); font-family: "Barlow Condensed", sans-serif; font-size: clamp(1.55rem, 2.6vw, 2.35rem); font-weight: 800; line-height: .92; text-overflow: ellipsis; white-space: nowrap; }
+.cloudinary-metrics small { display: block; margin-top: 7px; color: var(--muted); font-size: .73rem; line-height: 1.35; }
 .admin-bulk-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 17px 0; border-bottom: 1px solid var(--line); }
 .admin-bulk-toolbar > span { margin-right: auto; color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-size: .86rem; font-weight: 700; letter-spacing: .08em; }
 .admin-bulk-toolbar .btn-primary { width: auto; min-height: 42px; }
@@ -341,6 +351,7 @@ button { color: inherit; }
     .upload-grid { grid-template-columns: 1fr; }
     .advanced-filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
     .admin-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cloudinary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .admin-collection-form { grid-template-columns: 1fr 1fr; }
     .admin-collection-form .btn-primary { grid-column: 1 / -1; width: 100%; }
     .collection-browser { grid-template-columns: 1fr; }
@@ -370,6 +381,9 @@ button { color: inherit; }
     .selection-toolbar .secondary-action, .selection-toolbar .btn-primary { width: 100%; }
     .selection-count { width: 100%; margin-left: 0; }
     .admin-dashboard { grid-template-columns: 1fr; }
+    .cloudinary-usage-heading { align-items: start; flex-direction: column; }
+    .cloudinary-usage-heading .secondary-action { width: 100%; }
+    .cloudinary-metrics { grid-template-columns: 1fr; gap: 16px; }
     .admin-collection-form { grid-template-columns: 1fr; }
     .admin-collection-card { grid-template-columns: 76px minmax(0, 1fr); gap: 11px; }
     .admin-collection-cover { width: 76px; height: 76px; }
