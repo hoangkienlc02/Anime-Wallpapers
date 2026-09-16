@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, increment, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, deleteDoc, doc, getDocs, increment, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { auth, db } from "./firebase-config.js";
 import { protectPage } from "./auth-gate.js";
@@ -9,6 +9,7 @@ let currentPage = 1;
 let sortMode = "featured";
 let activeDetailItem = null;
 let libraryCollections = [];
+let unsubscribePhotos = null;
 const cloudFavoriteIds = new Set();
 const cloudDownloadIds = new Set();
 const selectedImageIds = new Set();
@@ -490,7 +491,8 @@ function syncRouteControls(path, tag = "") {
     if (collectionId) document.querySelectorAll(`[data-collection-id="${CSS.escape(collectionId)}"]`).forEach((element) => element.classList.add("active"));
 }
 
-function renderRoute() {
+function renderRoute(options = {}) {
+    const preservePage = options?.preservePage === true;
     const path = decodeURIComponent(location.pathname.replace(/\/+$/, "")) || "/";
     const collectionView = document.getElementById("collectionView");
     const libraryGallery = document.getElementById("libraryGallery");
@@ -568,7 +570,7 @@ function renderRoute() {
     searchInput.value = queryText;
     filteredImages = applySort(applyAdvancedFilters(data));
     syncRouteControls(path, activeTag || (path === "/" || path === "/wallpapers" ? "all" : ""));
-    goToPage(1, { scroll: false });
+    goToPage(preservePage ? currentPage : 1, { scroll: false });
     if (detailItem && !isVideo(detailItem)) window.openMediaDetails(detailItem);
 }
 
@@ -602,7 +604,8 @@ window.sortGallery = (mode, button) => {
 
 window.goToPage = async function goToPage(page, { scroll = false, showSkeleton = false } = {}) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
-    if (page < 1 || (totalPages > 0 && page > totalPages)) return;
+    if (page < 1) return;
+    if (totalPages > 0 && page > totalPages) page = totalPages;
     const pageChanged = currentPage !== page;
     if (paginationLoading) return;
     currentPage = page;
@@ -772,16 +775,23 @@ async function loadImages(user) {
     const gallery = document.getElementById("gallery");
     renderGallerySkeleton();
     try {
-        const [snapshot] = await Promise.all([
-            getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
-            loadCollections(),
-            loadPersonalData(user)
-        ]);
-        allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-        populateAdvancedFilters();
-        syncAdvancedFilterControls();
-        renderFilterTags();
-        renderRoute();
+        await Promise.all([loadCollections(), loadPersonalData(user)]);
+        unsubscribePhotos?.();
+        let receivedFirstSnapshot = false;
+        const photosQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
+        unsubscribePhotos = onSnapshot(photosQuery, (snapshot) => {
+            const hasLiveChanges = receivedFirstSnapshot && snapshot.docChanges().length > 0;
+            allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+            populateAdvancedFilters();
+            syncAdvancedFilterControls();
+            renderFilterTags();
+            renderRoute({ preservePage: receivedFirstSnapshot });
+            if (hasLiveChanges) showToast("Thư viện vừa được cập nhật.");
+            receivedFirstSnapshot = true;
+        }, (error) => {
+            console.error("Không thể đồng bộ thư viện realtime:", error);
+            gallery.textContent = "Không thể đồng bộ thư viện. Hãy kiểm tra quyền truy cập Firebase.";
+        });
     } catch (error) {
         console.error(error);
         gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra quyền truy cập Firebase.";
@@ -900,5 +910,6 @@ document.getElementById("clearSelection").addEventListener("click", () => {
     updateSelectionControls();
 });
 window.addEventListener("popstate", renderRoute);
+window.addEventListener("beforeunload", () => unsubscribePhotos?.());
 
 protectPage(loadImages);
