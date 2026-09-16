@@ -202,6 +202,9 @@ export function protectPage(onReady) {
     });
     signOutButton.addEventListener("click", async () => {
         startSessionCheck();
+        // Never leave a protected filter/detail URL in the address bar after
+        // signing out; the next account starts from the main library.
+        history.replaceState({}, "", "/wallpapers");
         try { await signOut(auth); }
         catch (err) { console.error("Firebase sign-out failed:", err); document.body.classList.remove("auth-pending"); setError("Không thể đăng xuất. Hãy kiểm tra kết nối rồi thử lại."); }
     });

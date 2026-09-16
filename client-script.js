@@ -11,6 +11,8 @@ let libraryCollections = [];
 const selectedImageIds = new Set();
 const advancedFilters = { device: "", media: "", orientation: "", resolution: "", theme: "", character: "", series: "", artist: "" };
 const itemsPerPage = 20;
+const PAGE_SKELETON_DURATION_MS = 240;
+let paginationLoading = false;
 
 function isAdminSession() {
     return document.getElementById("appShell")?.dataset.userRole === "admin";
@@ -542,11 +544,20 @@ window.sortGallery = (mode, button) => {
     goToPage(1, { scroll: false });
 };
 
-window.goToPage = function goToPage(page, { scroll = false } = {}) {
+window.goToPage = async function goToPage(page, { scroll = false, showSkeleton = false } = {}) {
     const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
     if (page < 1 || (totalPages > 0 && page > totalPages)) return;
+    const pageChanged = currentPage !== page;
+    if (paginationLoading) return;
     currentPage = page;
     updateResultCount();
+    if (showSkeleton && pageChanged) {
+        paginationLoading = true;
+        renderPagination();
+        renderGallerySkeleton();
+        await new Promise((resolve) => setTimeout(resolve, PAGE_SKELETON_DURATION_MS));
+        paginationLoading = false;
+    }
     renderGallery(filteredImages.slice((page - 1) * itemsPerPage, page * itemsPerPage));
     renderPagination();
     updateSelectionControls();
@@ -562,8 +573,8 @@ function renderPagination() {
             const button = document.createElement("button");
             button.className = `page-btn ${active ? "active" : ""}`;
             button.innerHTML = label;
-            button.disabled = disabled;
-            button.addEventListener("click", () => goToPage(page));
+            button.disabled = disabled || paginationLoading;
+            button.addEventListener("click", () => goToPage(page, { showSkeleton: true }));
             container.appendChild(button);
         };
         addButton('<span class="material-icons-outlined">chevron_left</span>', currentPage - 1, currentPage === 1);
