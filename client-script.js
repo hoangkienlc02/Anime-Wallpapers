@@ -203,52 +203,6 @@ function refreshDetailPanel() {
     favoriteButton.innerHTML = `<span class="material-icons-outlined">${favorite ? "bookmark" : "bookmark_border"}</span> ${favorite ? "ĐÃ LƯU YÊU THÍCH" : "LƯU YÊU THÍCH"}`;
     favoriteButton.classList.toggle("is-active", favorite);
     document.getElementById("detailOpenOriginal").href = item.url;
-    renderRelatedMedia(item);
-}
-
-function renderRelatedMedia(item) {
-    const container = document.getElementById("relatedMedia");
-    if (!container) return;
-    const sameValue = (first, second) => normalize(first) && normalize(first) === normalize(second);
-    const scored = allImages
-        .filter((candidate) => candidate.id !== item.id && !isVideo(candidate))
-        .map((candidate) => ({
-            candidate,
-            score: (sameValue(candidate.seriesName, item.seriesName) ? 3 : 0)
-                + (sameValue(candidate.subName, item.subName) ? 2 : 0)
-                + (sameValue(candidate.theme, item.theme) ? 1 : 0)
-                + (sameValue(candidate.device, item.device) ? 1 : 0)
-        }))
-        .sort((first, second) => second.score - first.score || getCreatedTime(second.candidate) - getCreatedTime(first.candidate));
-    const related = scored.filter((entry) => entry.score > 0).map((entry) => entry.candidate);
-    const suggestions = (related.length ? related : scored.map((entry) => entry.candidate)).slice(0, 3);
-    container.replaceChildren();
-    if (!suggestions.length) {
-        const empty = document.createElement("span");
-        empty.className = "related-media-empty";
-        empty.textContent = "Chưa có ảnh gợi ý khác.";
-        container.appendChild(empty);
-        return;
-    }
-    suggestions.forEach((suggestion) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "related-media-card";
-        const image = document.createElement("img");
-        image.src = getOptimizedUrl(suggestion.url);
-        image.alt = suggestion.subName || suggestion.seriesName || "Ảnh gợi ý";
-        image.loading = "lazy";
-        const label = document.createElement("span");
-        label.textContent = suggestion.subName || suggestion.seriesName || suggestion.theme || "WALLPAPER";
-        button.append(image, label);
-        button.addEventListener("click", () => {
-            activeDetailItem = suggestion;
-            document.getElementById("lightbox-img").src = suggestion.url;
-            refreshDetailPanel();
-            hydrateDetailTechnicalMetadata(suggestion);
-        });
-        container.appendChild(button);
-    });
 }
 
 async function hydrateDetailTechnicalMetadata(item) {
