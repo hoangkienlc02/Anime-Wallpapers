@@ -893,8 +893,8 @@ document.querySelectorAll("[data-router-link]").forEach((link) => {
     });
 });
 document.getElementById("detailClose").addEventListener("click", window.closeMediaDetails);
-document.getElementById("detailPrevious").addEventListener("click", () => openAdjacentDetail(-1));
-document.getElementById("detailNext").addEventListener("click", () => openAdjacentDetail(1));
+document.getElementById("detailPrevious").addEventListener("click", (event) => { event.stopPropagation(); openAdjacentDetail(-1); });
+document.getElementById("detailNext").addEventListener("click", (event) => { event.stopPropagation(); openAdjacentDetail(1); });
 document.getElementById("detailDownload").addEventListener("click", () => {
     if (!activeDetailItem) return;
     trackInteraction(activeDetailItem, "downloads");

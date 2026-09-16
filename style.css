@@ -335,9 +335,9 @@ button { color: inherit; }
 .media-detail-dialog { position: relative; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(285px, .65fr); width: min(100%, 1260px); max-height: calc(100vh - 60px); overflow: auto; border: 1px solid var(--line-strong); background: var(--surface); box-shadow: 22px 26px 0 rgba(0, 0, 0, .22); }
 .detail-media { position: relative; display: grid; place-items: center; min-height: 440px; padding: 22px; background: #020d0e; }
 .detail-media #lightbox-img { display: block; width: 100%; max-width: 100%; max-height: calc(100vh - 104px); border: 0; box-shadow: none; object-fit: contain; }
-.detail-nav { position: absolute; z-index: 2; top: 50%; display: grid; place-items: center; width: 46px; height: 58px; padding: 0; border: 1px solid var(--line-strong); color: #fff; background: rgba(2, 18, 19, .76); cursor: pointer; transform: translateY(-50%); transition: .2s; }
-.detail-nav-previous { left: 13px; }
-.detail-nav-next { right: 13px; }
+.detail-nav { position: fixed; z-index: 501; top: 50%; display: grid; place-items: center; width: 46px; height: 58px; padding: 0; border: 1px solid var(--line-strong); color: #fff; background: rgba(2, 18, 19, .76); cursor: pointer; transform: translateY(-50%); transition: .2s; }
+.detail-nav-previous { left: 8px; }
+.detail-nav-next { right: 8px; }
 .detail-nav:hover { border-color: var(--accent); background: var(--accent); }
 .detail-nav:disabled { opacity: .25; cursor: not-allowed; }
 .detail-nav:disabled:hover { border-color: var(--line-strong); background: rgba(2, 18, 19, .76); }
@@ -466,8 +466,6 @@ button { color: inherit; }
     .detail-media { min-height: 250px; padding: 16px; }
     .detail-media #lightbox-img { max-height: 60vh; }
     .detail-nav { width: 40px; height: 50px; }
-    .detail-nav-previous { left: 8px; }
-    .detail-nav-next { right: 8px; }
     .detail-panel { padding: 26px 20px 20px; border-top: 1px solid var(--line); border-left: 0; }
     .detail-metadata { grid-template-columns: 1fr; }
     .detail-metadata div { padding: 10px 0; border-right: 0 !important; }
