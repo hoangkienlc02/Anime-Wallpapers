@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { browserSessionPersistence, getAuth, initializeAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { browserSessionPersistence, initializeAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // These values identify the Firebase project; they are not server secrets.
@@ -16,14 +16,10 @@ const firebaseConfig = {
 };
 
 
-// The admin page uses a distinct Firebase app name and tab-only persistence.
-// It therefore cannot overwrite the client session open in another tab.
-const adminSurface = location.pathname.replace(/\/+$/, "") === "/admin";
-const app = adminSurface
-  ? initializeApp(firebaseConfig, "anime-wallpapers-admin")
-  : initializeApp(firebaseConfig);
+// Session storage is isolated per browser tab. Using one Firebase app means an
+// admin can open the library in the same tab without signing in again, while a
+// client account open in another tab is never overwritten.
+const app = initializeApp(firebaseConfig);
 
-export const auth = adminSurface
-  ? initializeAuth(app, { persistence: browserSessionPersistence })
-  : getAuth(app);
+export const auth = initializeAuth(app, { persistence: browserSessionPersistence });
 export const db = getFirestore(app);

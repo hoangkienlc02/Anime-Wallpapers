@@ -86,6 +86,17 @@ export function protectPage(onReady) {
         if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
         document.body.classList.remove("auth-pending");
     }
+    function resetToLibraryRoute({ redirect = false } = {}) {
+        // Keep /admin stable so its dedicated login page continues to work.
+        if (!registrationAllowed) return;
+        if (location.pathname !== "/wallpapers" || location.search || location.hash) {
+            if (redirect) {
+                location.replace("/wallpapers");
+                return;
+            }
+            history.replaceState({}, "", "/wallpapers");
+        }
+    }
     async function showUnverifiedAccount(user) {
         appShell.hidden = true;
         gate.hidden = false;
@@ -114,6 +125,7 @@ export function protectPage(onReady) {
                 return;
             }
             if (verifyNotice) verifyNotice.hidden = true;
+            resetToLibraryRoute();
             gate.hidden = true;
             appShell.hidden = false;
             appShell.dataset.userRole = currentUser.uid === OWNER_UID ? "admin" : "client";
@@ -202,9 +214,6 @@ export function protectPage(onReady) {
     });
     signOutButton.addEventListener("click", async () => {
         startSessionCheck();
-        // Never leave a protected filter/detail URL in the address bar after
-        // signing out; the next account starts from the main library.
-        history.replaceState({}, "", "/wallpapers");
         try { await signOut(auth); }
         catch (err) { console.error("Firebase sign-out failed:", err); document.body.classList.remove("auth-pending"); setError("Không thể đăng xuất. Hãy kiểm tra kết nối rồi thử lại."); }
     });
@@ -212,7 +221,15 @@ export function protectPage(onReady) {
     switchButton?.addEventListener("click", () => setAuthMode(authMode === "login" ? "register" : "login"));
     if (registrationAllowed) setAuthMode("login");
     onAuthStateChanged(auth, async (user) => {
-        if (!user) { appShell.hidden = true; gate.hidden = false; await finishSessionCheck(); return; }
+        if (!user) {
+            // Replace the current history entry after a sign-out. Pressing
+            // Back cannot restore a protected tag/detail route for login.
+            resetToLibraryRoute({ redirect: true });
+            appShell.hidden = true;
+            gate.hidden = false;
+            await finishSessionCheck();
+            return;
+        }
         await revealApp(user);
     });
 }
