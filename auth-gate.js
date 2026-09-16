@@ -123,6 +123,17 @@ export function protectPage(onReady) {
             history.replaceState({}, "", "/");
         }
     }
+    function clearSignedOutRoute({ redirect = false } = {}) {
+        // A client returns to the public root; the admin returns to a clean
+        // /admin URL. This deliberately removes old hashes such as #adminUsers.
+        const target = registrationAllowed ? "/" : "/admin";
+        if (location.pathname === target && !location.search && !location.hash) return;
+        if (redirect) {
+            location.replace(target);
+            return;
+        }
+        history.replaceState({}, "", target);
+    }
     async function showUnverifiedAccount(user) {
         appShell.hidden = true;
         gate.hidden = false;
@@ -256,11 +267,15 @@ export function protectPage(onReady) {
     modeButtons.forEach((button) => button.addEventListener("click", () => setAuthMode(button.dataset.authMode)));
     switchButton?.addEventListener("click", () => setAuthMode(authMode === "login" ? "register" : "login"));
     if (registrationAllowed) setAuthMode("login");
+    window.addEventListener("popstate", () => {
+        // Back/Forward cannot expose an old admin anchor after sign-out.
+        if (!auth.currentUser) clearSignedOutRoute();
+    });
     onAuthStateChanged(auth, async (user) => {
         if (!user) {
             // Replace the current history entry after a sign-out. Pressing
             // Back cannot restore a protected tag/detail route for login.
-            resetToLibraryRoute({ redirect: true });
+            clearSignedOutRoute({ redirect: true });
             appShell.hidden = true;
             gate.hidden = false;
             await finishSessionCheck();
