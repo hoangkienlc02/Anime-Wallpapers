@@ -204,6 +204,37 @@ function refreshDetailPanel() {
     favoriteButton.innerHTML = `<span class="material-icons-outlined">${favorite ? "bookmark" : "bookmark_border"}</span> ${favorite ? "ĐÃ LƯU YÊU THÍCH" : "LƯU YÊU THÍCH"}`;
     favoriteButton.classList.toggle("is-active", favorite);
     document.getElementById("detailOpenOriginal").href = item.url;
+    updateDetailNavigation();
+}
+
+function getDetailSequence() {
+    const filteredPhotos = filteredImages.filter((item) => !isVideo(item));
+    if (filteredPhotos.length > 1 && filteredPhotos.some((item) => item.id === activeDetailItem?.id)) return filteredPhotos;
+    return applySort(allImages.filter((item) => !isVideo(item)));
+}
+
+function updateDetailNavigation() {
+    const previousButton = document.getElementById("detailPrevious");
+    const nextButton = document.getElementById("detailNext");
+    const sequence = getDetailSequence();
+    const canNavigate = sequence.length > 1 && sequence.some((item) => item.id === activeDetailItem?.id);
+    previousButton.disabled = !canNavigate;
+    nextButton.disabled = !canNavigate;
+}
+
+function openAdjacentDetail(direction) {
+    if (!activeDetailItem) return;
+    const sequence = getDetailSequence();
+    if (sequence.length < 2) return;
+    const currentIndex = sequence.findIndex((item) => item.id === activeDetailItem.id);
+    if (currentIndex < 0) return;
+    const nextIndex = (currentIndex + direction + sequence.length) % sequence.length;
+    const nextItem = sequence[nextIndex];
+    activeDetailItem = nextItem;
+    history.replaceState({}, "", `/wallpaper/${encodeURIComponent(nextItem.id)}`);
+    document.getElementById("lightbox-img").src = nextItem.url;
+    refreshDetailPanel();
+    hydrateDetailTechnicalMetadata(nextItem);
 }
 
 async function hydrateDetailTechnicalMetadata(item) {
@@ -848,6 +879,8 @@ backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "s
 document.addEventListener("keydown", (event) => {
     if (["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
     if (event.key === "Escape" && activeDetailItem) return window.closeMediaDetails();
+    if (activeDetailItem && event.key === "ArrowRight") { event.preventDefault(); return openAdjacentDetail(1); }
+    if (activeDetailItem && event.key === "ArrowLeft") { event.preventDefault(); return openAdjacentDetail(-1); }
     if (event.key === "ArrowRight") goToPage(currentPage + 1);
     if (event.key === "ArrowLeft") goToPage(currentPage - 1);
 });
@@ -860,6 +893,8 @@ document.querySelectorAll("[data-router-link]").forEach((link) => {
     });
 });
 document.getElementById("detailClose").addEventListener("click", window.closeMediaDetails);
+document.getElementById("detailPrevious").addEventListener("click", () => openAdjacentDetail(-1));
+document.getElementById("detailNext").addEventListener("click", () => openAdjacentDetail(1));
 document.getElementById("detailDownload").addEventListener("click", () => {
     if (!activeDetailItem) return;
     trackInteraction(activeDetailItem, "downloads");
