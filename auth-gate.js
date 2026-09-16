@@ -6,6 +6,7 @@ const MIN_PASSWORD_LENGTH = 12;
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const VERIFICATION_COOLDOWN_MS = 60 * 1000;
+const MIN_SESSION_LOADER_MS = 420;
 
 function passwordError(password) {
     if (password.length < MIN_PASSWORD_LENGTH) return `Mật khẩu cần ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`;
@@ -75,14 +76,23 @@ export function protectPage(onReady) {
         if (verifyNotice) verifyNotice.hidden = true;
         setError();
     }
-    const finishSessionCheck = () => document.body.classList.remove("auth-pending");
+    let sessionLoaderStartedAt = performance.now();
+    function startSessionCheck() {
+        sessionLoaderStartedAt = performance.now();
+        document.body.classList.add("auth-pending");
+    }
+    async function finishSessionCheck() {
+        const remaining = MIN_SESSION_LOADER_MS - (performance.now() - sessionLoaderStartedAt);
+        if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+        document.body.classList.remove("auth-pending");
+    }
     async function showUnverifiedAccount(user) {
         appShell.hidden = true;
         gate.hidden = false;
         emailInput.value = user.email || emailInput.value;
         if (verifyNotice) verifyNotice.hidden = false;
         setError("Email này chưa được xác minh nên chưa thể truy cập thư viện.");
-        finishSessionCheck();
+        await finishSessionCheck();
     }
     async function revealApp(user) {
         if (registrationInFlight) return;
@@ -100,7 +110,7 @@ export function protectPage(onReady) {
             if (token.claims.email_verified !== true) return showUnverifiedAccount(currentUser);
             if (!registrationAllowed && currentUser.uid !== OWNER_UID) {
                 setError("Tài khoản này không có quyền truy cập khu vực Quản trị.");
-                try { await signOut(auth); } finally { finishSessionCheck(); }
+                try { await signOut(auth); } finally { await finishSessionCheck(); }
                 return;
             }
             if (verifyNotice) verifyNotice.hidden = true;
@@ -108,14 +118,14 @@ export function protectPage(onReady) {
             appShell.hidden = false;
             appShell.dataset.userRole = currentUser.uid === OWNER_UID ? "admin" : "client";
             accountLabel.textContent = currentUser.email || "Đã đăng nhập";
-            finishSessionCheck();
+            await finishSessionCheck();
             if (!hasStarted) { hasStarted = true; await onReady(currentUser); }
-        })().catch((err) => {
+        })().catch(async (err) => {
             console.warn("Could not refresh the verified session:", err.code || err.message);
             appShell.hidden = true;
             gate.hidden = false;
             setError("Không thể xác minh phiên đăng nhập. Hãy đăng xuất rồi thử lại.");
-            finishSessionCheck();
+            await finishSessionCheck();
         }).finally(() => { revealInFlight = null; });
         return revealInFlight;
     }
@@ -142,6 +152,7 @@ export function protectPage(onReady) {
         }
         authSubmissionInFlight = true;
         submitButton.disabled = true;
+        startSessionCheck();
         try {
             if (authMode === "register") {
                 registrationInFlight = true;
@@ -168,6 +179,7 @@ export function protectPage(onReady) {
                 const messages = { "auth/operation-not-allowed": "Email/Password chưa được bật trong Firebase Authentication.", "auth/unauthorized-domain": "Domain hiện tại chưa được cho phép trong Firebase Authentication.", "auth/network-request-failed": "Không kết nối được tới Firebase. Hãy kiểm tra mạng.", "auth/too-many-requests": "Bạn đã thử quá nhiều lần. Hãy chờ vài phút rồi thử lại.", "auth/email-already-in-use": "Không thể tạo tài khoản với email này.", "auth/invalid-email": "Email chưa đúng định dạng." };
                 setError(messages[err.code] || "Không thể hoàn tất yêu cầu. Hãy thử lại sau.");
             }
+            await finishSessionCheck();
         } finally {
             registrationInFlight = false;
             authSubmissionInFlight = false;
@@ -189,7 +201,7 @@ export function protectPage(onReady) {
         catch (err) { console.warn("Verification email failed:", err.code); setError(err.message || "Không thể gửi email xác minh. Hãy thử lại sau."); }
     });
     signOutButton.addEventListener("click", async () => {
-        document.body.classList.add("auth-pending");
+        startSessionCheck();
         try { await signOut(auth); }
         catch (err) { console.error("Firebase sign-out failed:", err); document.body.classList.remove("auth-pending"); setError("Không thể đăng xuất. Hãy kiểm tra kết nối rồi thử lại."); }
     });
@@ -197,7 +209,7 @@ export function protectPage(onReady) {
     switchButton?.addEventListener("click", () => setAuthMode(authMode === "login" ? "register" : "login"));
     if (registrationAllowed) setAuthMode("login");
     onAuthStateChanged(auth, async (user) => {
-        if (!user) { appShell.hidden = true; gate.hidden = false; finishSessionCheck(); return; }
+        if (!user) { appShell.hidden = true; gate.hidden = false; await finishSessionCheck(); return; }
         await revealApp(user);
     });
 }

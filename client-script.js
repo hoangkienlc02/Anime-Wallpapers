@@ -295,6 +295,18 @@ function makeAction(icon, title, handler) {
     return button;
 }
 
+function renderGallerySkeleton() {
+    const gallery = document.getElementById("gallery");
+    gallery.replaceChildren();
+    for (let index = 0; index < 9; index += 1) {
+        const card = document.createElement("article");
+        card.className = `card skeleton-card skeleton-card-${index % 3}`;
+        card.setAttribute("aria-hidden", "true");
+        card.appendChild(document.createElement("span"));
+        gallery.appendChild(card);
+    }
+}
+
 function renderGallery(data) {
     const gallery = document.getElementById("gallery");
     gallery.replaceChildren();
@@ -316,6 +328,7 @@ function renderGallery(data) {
             media.muted = true;
             media.loop = true;
             media.playsInline = true;
+            media.preload = "metadata";
             media.addEventListener("mouseenter", () => media.play());
             media.addEventListener("mouseleave", () => media.pause());
         } else {
@@ -690,7 +703,7 @@ async function downloadSelectedAsZip() {
 
 async function loadImages() {
     const gallery = document.getElementById("gallery");
-    gallery.textContent = "Đang tải thư viện…";
+    renderGallerySkeleton();
     try {
         const [snapshot] = await Promise.all([
             getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
