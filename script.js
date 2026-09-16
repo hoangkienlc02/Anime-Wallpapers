@@ -1,5 +1,5 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db } from "./firebase-config.js";
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { auth, db } from "./firebase-config.js";
 import { getIdToken, protectPage } from "./auth-gate.js";
 
 let allImages = [];
@@ -11,6 +11,7 @@ let selectedPreviewIndex = 0;
 let activeDetailItem = null;
 const selectedAdminIds = new Set();
 let adminCollections = [];
+let archiveUsers = [];
 let activeCollectionPicker = null;
 let collectionPickerIds = new Set();
 let collectionPickerPage = 1;
@@ -146,6 +147,67 @@ async function loadAdminCollections() {
         adminCollections = [];
         console.warn("Không thể tải bộ sưu tập:", error);
     }
+}
+
+async function loadArchiveUsers() {
+    try {
+        const snapshot = await getDocs(collection(db, "users"));
+        archiveUsers = snapshot.docs
+            .map((entry) => ({ id: entry.id, ...entry.data() }))
+            .sort((first, second) => (second.createdAt?.toMillis?.() || 0) - (first.createdAt?.toMillis?.() || 0));
+    } catch (error) {
+        archiveUsers = [];
+        console.warn("Không thể tải danh sách user:", error);
+    }
+}
+
+function renderUserManagement() {
+    const list = document.getElementById("adminUserList");
+    const count = document.getElementById("adminUserCount");
+    list.replaceChildren();
+    count.textContent = `${archiveUsers.length} USER`;
+    if (!archiveUsers.length) {
+        const empty = document.createElement("p");
+        empty.className = "collection-empty";
+        empty.textContent = "Chưa có user nào đăng nhập ở bản cập nhật này.";
+        list.appendChild(empty);
+        return;
+    }
+    archiveUsers.forEach((user) => {
+        const row = document.createElement("article");
+        row.className = "admin-user-row";
+        const details = document.createElement("div");
+        const email = document.createElement("strong");
+        email.textContent = user.email || "Không có email";
+        const joined = document.createElement("span");
+        const timestamp = user.createdAt?.toDate?.();
+        joined.textContent = timestamp ? `Tham gia: ${timestamp.toLocaleDateString("vi-VN")}` : "Chưa có thời gian";
+        details.append(email, joined);
+        const status = document.createElement("span");
+        const blocked = user.status === "blocked";
+        status.className = `user-status ${blocked ? "is-blocked" : ""}`;
+        status.textContent = blocked ? "ĐÃ CHẶN" : "ĐANG HOẠT ĐỘNG";
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = blocked ? "secondary-action" : "danger-action";
+        action.textContent = blocked ? "MỞ CHẶN" : "CHẶN USER";
+        action.disabled = user.id === auth.currentUser?.uid;
+        action.addEventListener("click", async () => {
+            action.disabled = true;
+            try {
+                await updateDoc(doc(db, "users", user.id), { status: blocked ? "active" : "blocked", updatedAt: serverTimestamp() });
+                showToast(blocked ? "Đã mở chặn user." : "Đã chặn user.");
+                await loadArchiveUsers();
+                renderUserManagement();
+            } catch (error) {
+                console.error(error);
+                showToast("Không thể cập nhật trạng thái user.", "error");
+                action.disabled = false;
+            }
+        });
+        row.append(details, status, action);
+        list.appendChild(row);
+    });
 }
 
 function makeCollectionAction(label, icon, handler, className = "secondary-action") {
@@ -955,12 +1017,14 @@ async function loadImages() {
     try {
         const [snapshot] = await Promise.all([
             getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
-            loadAdminCollections()
+            loadAdminCollections(),
+            loadArchiveUsers()
         ]);
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         filteredImages = [...allImages];
         renderDashboard();
         renderAdminCollections();
+        renderUserManagement();
         renderFilterTags();
         goToPage(1, { scroll: false });
         loadCloudinaryUsage();

@@ -1,4 +1,6 @@
 import { auth } from "./firebase-config.js";
+import { db } from "./firebase-config.js";
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const OWNER_UID = "aVIhWxMYfRNciqRmuNselJyi1MP2";
@@ -35,6 +37,30 @@ function recordFailedLogin(email) {
 }
 function clearLoginGuard(email) { try { localStorage.removeItem(loginGuardKey(email)); } catch { /* no-op */ } }
 function formatRemaining(milliseconds) { return `${Math.max(1, Math.ceil(milliseconds / 60000))} phút`; }
+
+async function ensureUserProfile(user) {
+    const profileRef = doc(db, "users", user.uid);
+    const snapshot = await getDoc(profileRef);
+    if (!snapshot.exists()) {
+        await setDoc(profileRef, {
+            uid: user.uid,
+            email: user.email || "",
+            status: "active",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        return;
+    }
+    const profile = snapshot.data();
+    if (profile.status === "blocked") {
+        const error = new Error("Tài khoản đã bị quản trị viên chặn.");
+        error.code = "account-blocked";
+        throw error;
+    }
+    if (profile.email !== (user.email || "")) {
+        await updateDoc(profileRef, { email: user.email || "", updatedAt: serverTimestamp() });
+    }
+}
 
 // The app remains unavailable until Firebase restores a verified user session.
 export function protectPage(onReady) {
@@ -119,6 +145,7 @@ export function protectPage(onReady) {
             // User profile. Forcing a token renewal makes both checks agree.
             const token = await currentUser.getIdTokenResult(true);
             if (token.claims.email_verified !== true) return showUnverifiedAccount(currentUser);
+            await ensureUserProfile(currentUser);
             if (!registrationAllowed && currentUser.uid !== OWNER_UID) {
                 setError("Tài khoản này không có quyền truy cập khu vực Quản trị.");
                 try { await signOut(auth); } finally { await finishSessionCheck(); }
@@ -136,7 +163,12 @@ export function protectPage(onReady) {
             console.warn("Could not refresh the verified session:", err.code || err.message);
             appShell.hidden = true;
             gate.hidden = false;
-            setError("Không thể xác minh phiên đăng nhập. Hãy đăng xuất rồi thử lại.");
+            if (err.code === "account-blocked") {
+                await signOut(auth);
+                setError("Tài khoản này đã bị quản trị viên chặn.");
+            } else {
+                setError("Không thể xác minh phiên đăng nhập. Hãy đăng xuất rồi thử lại.");
+            }
             await finishSessionCheck();
         }).finally(() => { revealInFlight = null; });
         return revealInFlight;

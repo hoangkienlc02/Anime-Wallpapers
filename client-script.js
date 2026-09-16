@@ -1,5 +1,6 @@
-import { collection, doc, getDocs, increment, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db } from "./firebase-config.js";
+import { collection, deleteDoc, doc, getDocs, increment, orderBy, query, serverTimestamp, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { auth, db } from "./firebase-config.js";
 import { protectPage } from "./auth-gate.js";
 
 let allImages = [];
@@ -7,7 +8,10 @@ let filteredImages = [];
 let currentPage = 1;
 let sortMode = "featured";
 let activeDetailItem = null;
+let slideshowTimer = null;
 let libraryCollections = [];
+const cloudFavoriteIds = new Set();
+const cloudDownloadIds = new Set();
 const selectedImageIds = new Set();
 const advancedFilters = { device: "", media: "", orientation: "", resolution: "", theme: "", character: "", series: "", artist: "" };
 const itemsPerPage = 20;
@@ -16,6 +20,19 @@ let paginationLoading = false;
 
 function isAdminSession() {
     return document.getElementById("appShell")?.dataset.userRole === "admin";
+}
+
+function validateNewPassword(password) {
+    if (password.length < 12) return "Mật khẩu mới cần ít nhất 12 ký tự.";
+    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) return "Mật khẩu mới cần chữ hoa, chữ thường, số và ký tự đặc biệt.";
+    return "";
+}
+
+async function reauthenticate(currentPassword) {
+    const user = auth.currentUser;
+    if (!user?.email) throw new Error("Không tìm thấy phiên đăng nhập.");
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword));
+    return user;
 }
 
 const showToast = (message, type = "success") => {
@@ -116,7 +133,11 @@ function updateResultCount() {
 
 async function trackInteraction(item, field) {
     item[field] = (Number(item[field]) || 0) + 1;
-    if (field === "downloads") localStorage.setItem(`anime-wallpaper-downloaded:${item.id}`, "true");
+    if (field === "downloads") {
+        localStorage.setItem(`anime-wallpaper-downloaded:${item.id}`, "true");
+        cloudDownloadIds.add(item.id);
+        savePersonalItem("downloads", item).catch((error) => console.warn("Không thể đồng bộ lịch sử tải:", error));
+    }
     if (!isAdminSession()) return;
     try {
         await updateDoc(doc(db, "photos", item.id), { [field]: increment(1) });
@@ -138,11 +159,28 @@ function isLiked(item) {
 }
 
 function isFavorite(item) {
-    return localStorage.getItem(`anime-wallpaper-favorite:${item.id}`) === "true";
+    return cloudFavoriteIds.has(item.id) || localStorage.getItem(`anime-wallpaper-favorite:${item.id}`) === "true";
 }
 
 function isDownloaded(item) {
-    return localStorage.getItem(`anime-wallpaper-downloaded:${item.id}`) === "true";
+    return cloudDownloadIds.has(item.id) || localStorage.getItem(`anime-wallpaper-downloaded:${item.id}`) === "true";
+}
+
+async function savePersonalItem(bucket, item) {
+    const user = auth.currentUser;
+    if (!user) return;
+    await setDoc(doc(db, "users", user.uid, bucket, item.id), { photoId: item.id, updatedAt: serverTimestamp() });
+}
+
+async function loadPersonalData(user) {
+    cloudFavoriteIds.clear();
+    cloudDownloadIds.clear();
+    const [favorites, downloads] = await Promise.all([
+        getDocs(collection(db, "users", user.uid, "favorites")),
+        getDocs(collection(db, "users", user.uid, "downloads"))
+    ]);
+    favorites.docs.forEach((entry) => cloudFavoriteIds.add(entry.id));
+    downloads.docs.forEach((entry) => cloudDownloadIds.add(entry.id));
 }
 
 function refreshDetailPanel() {
@@ -166,6 +204,89 @@ function refreshDetailPanel() {
     favoriteButton.innerHTML = `<span class="material-icons-outlined">${favorite ? "bookmark" : "bookmark_border"}</span> ${favorite ? "ĐÃ LƯU YÊU THÍCH" : "LƯU YÊU THÍCH"}`;
     favoriteButton.classList.toggle("is-active", favorite);
     document.getElementById("detailOpenOriginal").href = item.url;
+    const slideshowButton = document.getElementById("detailSlideshow");
+    const isPlaying = Boolean(slideshowTimer);
+    slideshowButton.innerHTML = `<span class="material-icons-outlined">${isPlaying ? "pause" : "slideshow"}</span> ${isPlaying ? "DỪNG SLIDESHOW" : "SLIDESHOW"}`;
+    slideshowButton.classList.toggle("is-active", isPlaying);
+    renderRelatedMedia(item);
+}
+
+function renderRelatedMedia(item) {
+    const container = document.getElementById("relatedMedia");
+    if (!container) return;
+    const sameValue = (first, second) => normalize(first) && normalize(first) === normalize(second);
+    const scored = allImages
+        .filter((candidate) => candidate.id !== item.id && !isVideo(candidate))
+        .map((candidate) => ({
+            candidate,
+            score: (sameValue(candidate.seriesName, item.seriesName) ? 3 : 0)
+                + (sameValue(candidate.subName, item.subName) ? 2 : 0)
+                + (sameValue(candidate.theme, item.theme) ? 1 : 0)
+                + (sameValue(candidate.device, item.device) ? 1 : 0)
+        }))
+        .sort((first, second) => second.score - first.score || getCreatedTime(second.candidate) - getCreatedTime(first.candidate));
+    const related = scored.filter((entry) => entry.score > 0).map((entry) => entry.candidate);
+    const suggestions = (related.length ? related : scored.map((entry) => entry.candidate)).slice(0, 3);
+    container.replaceChildren();
+    if (!suggestions.length) {
+        const empty = document.createElement("span");
+        empty.className = "related-media-empty";
+        empty.textContent = "Chưa có ảnh gợi ý khác.";
+        container.appendChild(empty);
+        return;
+    }
+    suggestions.forEach((suggestion) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "related-media-card";
+        const image = document.createElement("img");
+        image.src = getOptimizedUrl(suggestion.url);
+        image.alt = suggestion.subName || suggestion.seriesName || "Ảnh gợi ý";
+        image.loading = "lazy";
+        const label = document.createElement("span");
+        label.textContent = suggestion.subName || suggestion.seriesName || suggestion.theme || "WALLPAPER";
+        button.append(image, label);
+        button.addEventListener("click", () => {
+            activeDetailItem = suggestion;
+            document.getElementById("lightbox-img").src = suggestion.url;
+            refreshDetailPanel();
+            hydrateDetailTechnicalMetadata(suggestion);
+        });
+        container.appendChild(button);
+    });
+}
+
+function stopSlideshow() {
+    if (!slideshowTimer) return;
+    clearInterval(slideshowTimer);
+    slideshowTimer = null;
+    if (activeDetailItem) refreshDetailPanel();
+}
+
+function showNextSlideshowItem() {
+    const candidates = filteredImages.filter((item) => !isVideo(item));
+    const images = candidates.length ? candidates : allImages.filter((item) => !isVideo(item));
+    if (images.length < 2 || !activeDetailItem) return stopSlideshow();
+    const currentIndex = images.findIndex((item) => item.id === activeDetailItem.id);
+    const next = images[(currentIndex + 1 + images.length) % images.length];
+    activeDetailItem = next;
+    document.getElementById("lightbox-img").src = next.url;
+    trackInteraction(next, "views");
+    refreshDetailPanel();
+    hydrateDetailTechnicalMetadata(next);
+}
+
+function toggleSlideshow() {
+    if (slideshowTimer) {
+        stopSlideshow();
+        showToast("Đã dừng slideshow.");
+        return;
+    }
+    const images = filteredImages.filter((item) => !isVideo(item));
+    if (images.length < 2) return showToast("Cần ít nhất 2 ảnh để chạy slideshow.", "error");
+    slideshowTimer = setInterval(showNextSlideshowItem, 4500);
+    refreshDetailPanel();
+    showToast("Slideshow đang chạy, mỗi ảnh 4,5 giây.");
 }
 
 async function hydrateDetailTechnicalMetadata(item) {
@@ -208,6 +329,7 @@ window.openMediaDetails = (item) => {
 };
 
 window.closeMediaDetails = () => {
+    stopSlideshow();
     document.getElementById("lightbox").style.display = "none";
     activeDetailItem = null;
     if (location.pathname.startsWith("/wallpaper/")) {
@@ -241,6 +363,14 @@ function toggleFavorite(item = activeDetailItem) {
     if (!item) return;
     const favorite = !isFavorite(item);
     localStorage.setItem(`anime-wallpaper-favorite:${item.id}`, String(favorite));
+    if (favorite) {
+        cloudFavoriteIds.add(item.id);
+        savePersonalItem("favorites", item).catch((error) => console.warn("Không thể đồng bộ yêu thích:", error));
+    } else {
+        cloudFavoriteIds.delete(item.id);
+        const user = auth.currentUser;
+        if (user) deleteDoc(doc(db, "users", user.uid, "favorites", item.id)).catch((error) => console.warn("Không thể xóa yêu thích cloud:", error));
+    }
     if (activeDetailItem?.id === item.id) refreshDetailPanel();
     document.querySelectorAll(`[data-favorite-id="${CSS.escape(item.id)}"]`).forEach((button) => {
         button.classList.toggle("is-favorite", favorite);
@@ -450,6 +580,17 @@ function renderRoute() {
     const collectionView = document.getElementById("collectionView");
     const libraryGallery = document.getElementById("libraryGallery");
     const discoverPanel = document.querySelector(".discover-panel");
+    const accountView = document.getElementById("accountView");
+    if (path === "/account") {
+        discoverPanel.hidden = true;
+        libraryGallery.hidden = true;
+        collectionView.hidden = true;
+        accountView.hidden = false;
+        renderAccountView();
+        syncRouteControls(path);
+        return;
+    }
+    accountView.hidden = true;
     if (path === "/collections") {
         discoverPanel.hidden = true;
         libraryGallery.hidden = true;
@@ -535,6 +676,14 @@ window.filterImages = () => {
     const term = document.getElementById("searchInput").value.trim();
     navigateTo(term ? `/search?q=${encodeURIComponent(term)}` : "/wallpapers", { replace: true });
 };
+
+function openRandomWallpaper() {
+    const candidates = filteredImages.filter((item) => !isVideo(item));
+    if (!candidates.length) return showToast("Không có ảnh nào phù hợp với bộ lọc hiện tại.", "error");
+    const alternatives = candidates.filter((item) => item.id !== activeDetailItem?.id);
+    const item = (alternatives.length ? alternatives : candidates)[Math.floor(Math.random() * (alternatives.length || candidates.length))];
+    window.openWallpaperPage(item);
+}
 
 window.sortGallery = (mode, button) => {
     sortMode = mode;
@@ -712,13 +861,14 @@ async function downloadSelectedAsZip() {
     }
 }
 
-async function loadImages() {
+async function loadImages(user) {
     const gallery = document.getElementById("gallery");
     renderGallerySkeleton();
     try {
         const [snapshot] = await Promise.all([
             getDocs(query(collection(db, "photos"), orderBy("createdAt", "desc"))),
-            loadCollections()
+            loadCollections(),
+            loadPersonalData(user)
         ]);
         allImages = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
         populateAdvancedFilters();
@@ -730,6 +880,50 @@ async function loadImages() {
         gallery.textContent = "Không thể tải thư viện. Hãy kiểm tra quyền truy cập Firebase.";
     }
 }
+
+function renderAccountView() {
+    const user = auth.currentUser;
+    document.getElementById("accountEmail").textContent = user?.email || "Không có email";
+    document.getElementById("accountVerification").textContent = user?.emailVerified ? "EMAIL ĐÃ XÁC MINH" : "EMAIL CHƯA XÁC MINH";
+}
+
+document.getElementById("changePasswordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const current = document.getElementById("currentPasswordForPassword").value;
+    const next = document.getElementById("newPassword").value;
+    const confirm = document.getElementById("confirmNewPassword").value;
+    const issue = validateNewPassword(next);
+    if (issue) return showToast(issue, "error");
+    if (next !== confirm) return showToast("Mật khẩu nhập lại chưa khớp.", "error");
+    const button = event.currentTarget.querySelector("button");
+    button.disabled = true;
+    try {
+        const user = await reauthenticate(current);
+        await updatePassword(user, next);
+        event.currentTarget.reset();
+        showToast("Đã cập nhật mật khẩu.");
+    } catch (error) {
+        console.warn("Password update failed:", error.code);
+        showToast("Không thể đổi mật khẩu. Kiểm tra lại mật khẩu hiện tại.", "error");
+    } finally { button.disabled = false; }
+});
+
+document.getElementById("changeEmailForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const nextEmail = document.getElementById("newEmail").value.trim();
+    const current = document.getElementById("currentPasswordForEmail").value;
+    const button = event.currentTarget.querySelector("button");
+    button.disabled = true;
+    try {
+        const user = await reauthenticate(current);
+        await verifyBeforeUpdateEmail(user, nextEmail, { url: `${location.origin}/`, handleCodeInApp: false });
+        event.currentTarget.reset();
+        showToast("Đã gửi email xác minh đến địa chỉ mới.");
+    } catch (error) {
+        console.warn("Email update request failed:", error.code);
+        showToast("Không thể gửi xác minh email mới. Kiểm tra lại mật khẩu và email.", "error");
+    } finally { button.disabled = false; }
+});
 
 const backToTop = document.getElementById("backToTop");
 window.addEventListener("scroll", () => { backToTop.style.display = window.scrollY > 300 ? "flex" : "none"; });
@@ -769,6 +963,8 @@ document.getElementById("detailShare").addEventListener("click", async () => {
 });
 document.getElementById("detailLike").addEventListener("click", toggleLike);
 document.getElementById("detailFavorite").addEventListener("click", () => toggleFavorite());
+document.getElementById("detailSlideshow").addEventListener("click", toggleSlideshow);
+document.getElementById("randomWallpaper").addEventListener("click", openRandomWallpaper);
 document.getElementById("detailOpenOriginal").addEventListener("click", () => {
     if (activeDetailItem) trackInteraction(activeDetailItem, "views");
 });

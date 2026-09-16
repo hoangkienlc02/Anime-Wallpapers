@@ -23,6 +23,12 @@ In **Firebase Console → Authentication**:
 
 Unverified accounts cannot read the `photos` or `collections` data. Existing users, including the administrator, need to verify their email once before they can use the updated site.
 
+## Profiles, favorites, and user management
+
+After this update, the first successful verified login creates a `users/{uid}` profile. Favorites and download history are stored below that profile, so they follow the account across browsers. The administrator can view these profiles and block or unblock access from **Admin → User**. Blocking does not delete Firebase Authentication accounts or personal history; it only prevents the account from opening the library.
+
+Before deploying this version, publish the new `firestore.rules`. Without that step, the profile, favorite/history synchronization, and admin user list will be denied by Firebase.
+
 ## Backups and retention
 
 Cloudinary, Firebase, and Vercel are third-party services; none should be treated as a permanent-storage guarantee. Keep original files in at least one separate backup location (external drive plus another cloud provider is a practical minimum). The admin page can export its Firestore metadata as JSON, but that export does not replace copies of the media files.

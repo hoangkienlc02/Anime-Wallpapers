@@ -13,6 +13,10 @@ service cloud.firestore {
       return verifiedUser() && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
     }
 
+    function isSelf(userId) {
+      return verifiedUser() && request.auth.uid == userId;
+    }
+
     match /photos/{photoId} {
       // Only verified accounts can view; only the owner can manage archive data.
       allow read: if verifiedUser();
@@ -22,6 +26,32 @@ service cloud.firestore {
     match /collections/{collectionId} {
       allow read: if verifiedUser();
       allow create, update, delete: if isOwner();
+    }
+
+    match /users/{userId} {
+      allow read: if isSelf(userId) || isOwner();
+      // A newly registered user may only create their own active profile.
+      allow create: if isSelf(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == "active"
+        && request.resource.data.keys().hasOnly(["uid", "email", "status", "createdAt", "updatedAt"]);
+      // Users can only keep their profile email current; admin controls status.
+      allow update: if isOwner() || (isSelf(userId)
+        && resource.data.status == "active"
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["email", "updatedAt"]));
+      allow delete: if isOwner();
+
+      match /favorites/{photoId} {
+        allow read, create, update, delete: if isSelf(userId) || isOwner();
+      }
+
+      match /downloads/{photoId} {
+        allow read, create, update, delete: if isSelf(userId) || isOwner();
+      }
     }
   }
 }
