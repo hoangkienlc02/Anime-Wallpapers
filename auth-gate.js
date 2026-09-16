@@ -135,17 +135,6 @@ export function protectPage(onReady) {
         if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
         document.body.classList.remove("auth-pending");
     }
-    function resetToLibraryRoute({ redirect = false } = {}) {
-        // Keep /admin stable so its dedicated login page continues to work.
-        if (!registrationAllowed) return;
-        if (location.pathname !== "/" || location.search || location.hash) {
-            if (redirect) {
-                location.replace("/");
-                return;
-            }
-            history.replaceState({}, "", "/");
-        }
-    }
     function clearSignedOutRoute({ redirect = false } = {}) {
         // A client returns to the public root; the admin returns to a clean
         // /admin URL. This deliberately removes old hashes such as #adminUsers.
@@ -186,7 +175,10 @@ export function protectPage(onReady) {
                 return;
             }
             if (verifyNotice) verifyNotice.hidden = true;
-            resetToLibraryRoute();
+            // A signed-out visit is already cleaned to its safe entry route in
+            // the auth observer below. Do not reset an authenticated reload:
+            // this preserves deep links such as /wallpaper/<id>, /tag/... and
+            // /account after F5.
             gate.hidden = true;
             appShell.hidden = false;
             appShell.dataset.userRole = currentUser.uid === OWNER_UID ? "admin" : "client";
