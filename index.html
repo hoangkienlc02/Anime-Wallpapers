@@ -19,8 +19,11 @@
             <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
             <label>Mật khẩu <input id="loginPassword" type="password" autocomplete="current-password" minlength="6" required></label>
             <label id="confirmPasswordField" hidden>Nhập lại mật khẩu <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6"></label>
+            <p id="passwordHint" class="auth-security-hint" hidden>Mật khẩu mới: ít nhất 12 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.</p>
             <p id="loginError" class="login-error" aria-live="polite"></p>
             <button id="authSubmitButton" class="btn-primary" type="submit">MỞ KHO LƯU TRỮ <span class="material-icons-outlined">arrow_forward</span></button>
+            <p id="verifyNotice" class="auth-security-hint" hidden>Email chưa xác minh? <button id="resendVerificationButton" type="button">GỬI LẠI EMAIL XÁC MINH</button></p>
+            <p class="auth-switch"><button id="forgotPasswordButton" type="button">QUÊN MẬT KHẨU?</button></p>
             <p class="auth-switch">Chưa có tài khoản? <button id="authSwitchButton" type="button">ĐĂNG KÝ NGAY</button></p>
         </form>
     </section>

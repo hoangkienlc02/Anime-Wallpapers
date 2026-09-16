@@ -53,6 +53,9 @@ button { color: inherit; }
 .auth-switch { margin: 16px 0 0 !important; color: var(--muted); font-size: .8rem; text-align: center; }
 .auth-switch button { padding: 0; border: 0; color: var(--accent); background: transparent; cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-size: .85rem; font-weight: 800; letter-spacing: .06em; }
 .auth-switch button:hover { color: #fff; }
+.auth-security-hint { margin: 12px 0 0 !important; color: var(--muted); font-size: .78rem; line-height: 1.5; text-align: center; }
+.auth-security-hint button { padding: 0; border: 0; color: var(--accent); background: transparent; cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-size: .82rem; font-weight: 800; letter-spacing: .05em; }
+.auth-security-hint button:hover { color: #fff; }
 .login-card label, .form-group label { display: block; margin: 17px 0 0; color: var(--muted); font-family: "Barlow Condensed", sans-serif; letter-spacing: .08em; font-size: .9rem; font-weight: 700; }
 .login-card label[hidden] { display: none; }
 .login-card input, .form-group input, .form-group select { display: block; width: 100%; margin-top: 8px; padding: 14px 0; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; outline: 0; }

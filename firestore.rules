@@ -5,18 +5,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function verifiedUser() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     function isOwner() {
-      return signedIn() && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
+      return verifiedUser() && request.auth.uid == "aVIhWxMYfRNciqRmuNselJyi1MP2";
     }
 
     match /photos/{photoId} {
-      // Registered accounts can view; only the owner can manage archive data.
-      allow read: if signedIn();
+      // Only verified accounts can view; only the owner can manage archive data.
+      allow read: if verifiedUser();
       allow create, update, delete: if isOwner();
     }
 
     match /collections/{collectionId} {
-      allow read: if signedIn();
+      allow read: if verifiedUser();
       allow create, update, delete: if isOwner();
     }
   }
