@@ -15,6 +15,7 @@ let adminCollections = [];
 let archiveUsers = [];
 let adminUserPage = 1;
 let adminCollectionPage = 1;
+let currentAdminFilter = { kind: "all", term: "" };
 let activeCollectionPicker = null;
 let collectionPickerIds = new Set();
 let collectionPickerPage = 1;
@@ -1046,6 +1047,7 @@ window.saveEdit = async () => {
         const index = allImages.findIndex((item) => item.id === id);
         if (index >= 0) allImages[index] = { ...allImages[index], ...newData };
         filteredImages = [...allImages];
+        currentAdminFilter = { kind: "all", term: "" };
         window.closeEditModal();
         renderFilterTags();
         goToPage(currentPage, { scroll: false });
@@ -1079,9 +1081,21 @@ window.deletePhoto = async (item) => {
     try {
         await removeOne(item);
         if (activeDetailItem?.id === item.id) window.closeMediaDetails();
+
+        // The deletion is confirmed by Cloudinary and Firestore above. Keep
+        // the current view responsive by updating its in-memory data instead
+        // of re-reading the whole archive and showing a page-wide skeleton.
+        allImages = allImages.filter((entry) => entry.id !== item.id);
+        filteredImages = filteredImages.filter((entry) => entry.id !== item.id);
+        selectedAdminIds.delete(item.id);
+        const totalPages = Math.max(1, Math.ceil(filteredImages.length / itemsPerPage));
+        currentPage = Math.min(currentPage, totalPages);
+        renderDashboard();
         renderAdminCollections();
+        renderFilterTags();
+        syncFilterCatalog().catch((error) => console.warn("Không thể cập nhật catalog Game/Anime:", error));
+        goToPage(currentPage, { scroll: false });
         showToast("Đã xóa file và bản ghi.");
-        await loadImages();
     } catch (error) {
         console.error(error);
         showToast(`Chưa xóa: ${error.message}`, "error");
@@ -1106,7 +1120,7 @@ function renderFilterTags() {
     const container = document.getElementById("dynamic-tags");
     container.replaceChildren();
     const allButton = document.createElement("button");
-    allButton.className = "tag-btn active";
+    allButton.className = `tag-btn ${currentAdminFilter.kind === "all" ? "active" : ""}`;
     allButton.textContent = `Tất cả (${allImages.length})`;
     allButton.addEventListener("click", () => window.filterByDynamicTag("all", allButton));
     container.appendChild(allButton);
@@ -1117,7 +1131,7 @@ function renderFilterTags() {
     });
     [...counts.keys()].sort().forEach((name) => {
         const button = document.createElement("button");
-        button.className = "tag-btn";
+        button.className = `tag-btn ${currentAdminFilter.kind === "dynamic" && currentAdminFilter.term === name.toLowerCase() ? "active" : ""}`;
         button.append(document.createTextNode(`${name} `));
         const count = document.createElement("span");
         count.className = "tag-count";
@@ -1155,6 +1169,9 @@ window.filterByDynamicTag = (tag, button) => {
     document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
     button?.classList.add("active");
     const term = tag.toLowerCase();
+    currentAdminFilter = term === "all"
+        ? { kind: "all", term: "" }
+        : { kind: button?.classList.contains("tag-btn") ? "dynamic" : "quick", term };
     filteredImages = term === "all" ? [...allImages] : allImages.filter((item) =>
         item.subName?.toLowerCase().includes(term) || item.device?.toLowerCase() === term || item.theme?.toLowerCase() === term
     );
@@ -1163,17 +1180,20 @@ window.filterByDynamicTag = (tag, button) => {
 window.filterByType = (type, button) => {
     document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
     button?.classList.add("active");
+    currentAdminFilter = { kind: "type", term: type };
     filteredImages = allImages.filter((item) => isVideo(item) === (type === "video"));
     goToPage(1, { scroll: false });
 };
 window.filterMissingMetadata = (button) => {
     document.querySelectorAll(".tag-btn, .filter-item").forEach((element) => element.classList.remove("active"));
     button?.classList.add("active");
+    currentAdminFilter = { kind: "missing", term: "" };
     filteredImages = allImages.filter(isMissingMetadata);
     goToPage(1, { scroll: false });
 };
 window.filterImages = () => {
     const term = document.getElementById("searchInput").value.trim().toLowerCase();
+    currentAdminFilter = { kind: term ? "search" : "all", term };
     filteredImages = allImages.filter((item) => [item.device, item.theme, item.subName, item.seriesName, item.artistName].some((value) => value?.toLowerCase().includes(term)));
     goToPage(1, { scroll: false });
 };
@@ -1287,6 +1307,7 @@ async function loadImages() {
             };
         });
         filteredImages = [...allImages];
+        currentAdminFilter = { kind: "all", term: "" };
         renderDashboard();
         renderAdminCollections();
         renderUserManagement();
