@@ -31,7 +31,10 @@ const advancedFilters = { device: "", media: "", orientation: "", resolution: ""
 const itemsPerPage = 20;
 const PAGE_SKELETON_DURATION_MS = 240;
 const LIBRARY_LOAD_TIMEOUT_MS = 12000;
+const DETAIL_IMAGE_WIDTH = 1800;
+const DETAIL_PRELOAD_LIMIT = 8;
 let paginationLoading = false;
+const detailImagePreloaders = new Map();
 
 function isAdminSession() {
     return document.getElementById("appShell")?.dataset.userRole === "admin";
@@ -108,6 +111,15 @@ const showToast = (message, type = "success") => {
 function getOptimizedUrl(url) {
     if (!url || !url.includes("cloudinary")) return url;
     return url.replace("/upload/", "/upload/f_auto,q_auto,w_800/");
+}
+
+// Detail view uses a responsive Cloudinary rendition instead of downloading the
+// full original file. Original URLs remain available for the explicit download
+// and "view original" actions.
+function getDetailImageUrl(item) {
+    const url = item?.url || "";
+    if (isVideo(item) || !url.includes("cloudinary")) return url;
+    return url.replace("/upload/", `/upload/f_auto,q_auto,w_${DETAIL_IMAGE_WIDTH}/`);
 }
 
 function isVideo(item) {
@@ -318,6 +330,43 @@ function updateDetailNavigation() {
     nextButton.disabled = !canNavigate;
 }
 
+function preloadDetailImage(item) {
+    if (!item || isVideo(item)) return;
+    const url = getDetailImageUrl(item);
+    if (!url || detailImagePreloaders.has(url)) return;
+
+    const image = new Image();
+    image.decoding = "async";
+    image.src = url;
+    detailImagePreloaders.set(url, image);
+    while (detailImagePreloaders.size > DETAIL_PRELOAD_LIMIT) {
+        const [oldestUrl, oldestImage] = detailImagePreloaders.entries().next().value;
+        oldestImage.src = "";
+        detailImagePreloaders.delete(oldestUrl);
+    }
+}
+
+function preloadAdjacentDetails() {
+    const sequence = getDetailSequence();
+    const currentIndex = sequence.findIndex((item) => item.id === activeDetailItem?.id);
+    if (currentIndex < 0 || sequence.length < 2) return;
+
+    // Keeping the two neighbours in the browser cache makes repeated Next/Prev
+    // navigation instant without preloading the complete collection.
+    [-2, -1, 1, 2].forEach((offset) => {
+        const index = (currentIndex + offset + sequence.length) % sequence.length;
+        preloadDetailImage(sequence[index]);
+    });
+}
+
+function showDetailImage(item) {
+    const image = document.getElementById("lightbox-img");
+    const detailUrl = getDetailImageUrl(item);
+    image.decoding = "async";
+    image.fetchPriority = "high";
+    image.src = detailUrl;
+}
+
 function openAdjacentDetail(direction) {
     if (!activeDetailItem) return;
     const sequence = getDetailSequence();
@@ -328,13 +377,14 @@ function openAdjacentDetail(direction) {
     const nextItem = sequence[nextIndex];
     activeDetailItem = nextItem;
     history.replaceState({}, "", `/wallpaper/${encodeURIComponent(nextItem.id)}`);
-    document.getElementById("lightbox-img").src = nextItem.url;
+    showDetailImage(nextItem);
     refreshDetailPanel();
     hydrateDetailTechnicalMetadata(nextItem);
+    preloadAdjacentDetails();
 }
 
 async function hydrateDetailTechnicalMetadata(item) {
-    if (item.width && item.height && item.fileSizeBytes) return;
+    if (item.width && item.height) return;
     const updates = {};
     if (!item.width || !item.height) {
         const dimensions = await new Promise((resolve) => {
@@ -344,14 +394,6 @@ async function hydrateDetailTechnicalMetadata(item) {
             image.src = item.url;
         });
         Object.assign(updates, dimensions);
-    }
-    if (!item.fileSizeBytes) {
-        try {
-            const response = await fetch(item.url);
-            if (response.ok) updates.fileSizeBytes = (await response.blob()).size;
-        } catch {
-            // Older assets may not permit fetching their original file size from the browser.
-        }
     }
     if (!Object.keys(updates).length) return;
     Object.assign(item, updates);
@@ -367,11 +409,12 @@ async function hydrateDetailTechnicalMetadata(item) {
 window.openMediaDetails = (item) => {
     if (!activeDetailItem) lastDetailTrigger = document.activeElement;
     activeDetailItem = item;
-    document.getElementById("lightbox-img").src = item.url;
+    showDetailImage(item);
     refreshDetailPanel();
     document.getElementById("lightbox").style.display = "flex";
     document.getElementById("detailClose").focus();
     hydrateDetailTechnicalMetadata(item);
+    preloadAdjacentDetails();
 };
 
 window.closeMediaDetails = () => {
