@@ -23,7 +23,10 @@ const itemsPerPage = 20;
 const adminListItemsPerPage = 5;
 const PAGE_SKELETON_DURATION_MS = 240;
 const ADMIN_LOAD_TIMEOUT_MS = 12000;
+const DETAIL_IMAGE_WIDTH = 1800;
+const DETAIL_PRELOAD_LIMIT = 8;
 let paginationLoading = false;
+const detailImagePreloaders = new Map();
 
 const showToast = (message, type = "success") => {
     const toast = document.createElement("div");
@@ -68,6 +71,14 @@ function trapAdminModalFocus(event) {
 
 function getOptimizedUrl(url) {
     return url?.includes("cloudinary") ? url.replace("/upload/", "/upload/f_auto,q_auto,w_800/") : url;
+}
+
+// The detail dialog does not need the source original. A responsive rendition
+// keeps the original for download while making browsing much faster.
+function getDetailImageUrl(item) {
+    const url = item?.url || "";
+    if (isVideo(item) || !url.includes("cloudinary")) return url;
+    return url.replace("/upload/", `/upload/f_auto,q_auto,w_${DETAIL_IMAGE_WIDTH}/`);
 }
 
 function isVideo(item) {
@@ -640,6 +651,39 @@ function updateDetailNavigation() {
     nextButton.disabled = !canNavigate;
 }
 
+function preloadDetailImage(item) {
+    if (!item || isVideo(item)) return;
+    const url = getDetailImageUrl(item);
+    if (!url || detailImagePreloaders.has(url)) return;
+
+    const image = new Image();
+    image.decoding = "async";
+    image.src = url;
+    detailImagePreloaders.set(url, image);
+    while (detailImagePreloaders.size > DETAIL_PRELOAD_LIMIT) {
+        const [oldestUrl, oldestImage] = detailImagePreloaders.entries().next().value;
+        oldestImage.src = "";
+        detailImagePreloaders.delete(oldestUrl);
+    }
+}
+
+function preloadAdjacentDetails() {
+    const sequence = getDetailSequence();
+    const currentIndex = sequence.findIndex((item) => item.id === activeDetailItem?.id);
+    if (currentIndex < 0 || sequence.length < 2) return;
+    [-2, -1, 1, 2].forEach((offset) => {
+        const index = (currentIndex + offset + sequence.length) % sequence.length;
+        preloadDetailImage(sequence[index]);
+    });
+}
+
+function showDetailImage(item) {
+    const image = document.getElementById("lightbox-img");
+    image.decoding = "async";
+    image.fetchPriority = "high";
+    image.src = getDetailImageUrl(item);
+}
+
 function openAdjacentDetail(direction) {
     if (!activeDetailItem) return;
     const sequence = getDetailSequence();
@@ -648,17 +692,19 @@ function openAdjacentDetail(direction) {
     if (currentIndex < 0) return;
     const nextItem = sequence[(currentIndex + direction + sequence.length) % sequence.length];
     activeDetailItem = nextItem;
-    document.getElementById("lightbox-img").src = nextItem.url;
+    showDetailImage(nextItem);
     refreshDetailPanel();
+    preloadAdjacentDetails();
 }
 
 window.openMediaDetails = (item) => {
     if (!activeDetailItem) lastModalTrigger = document.activeElement;
     activeDetailItem = item;
-    document.getElementById("lightbox-img").src = item.url;
+    showDetailImage(item);
     refreshDetailPanel();
     document.getElementById("lightbox").style.display = "flex";
     document.getElementById("detailClose").focus();
+    preloadAdjacentDetails();
 };
 
 window.closeMediaDetails = () => {
@@ -913,7 +959,7 @@ function renderGallery(data) {
         return;
     }
 
-    data.forEach((item) => {
+    data.forEach((item, index) => {
         const video = isVideo(item);
         const card = document.createElement("article");
         card.className = `card ${item.device?.toLowerCase().includes("mobile") ? "mobile-view" : ""}`;
@@ -928,7 +974,9 @@ function renderGallery(data) {
             media.addEventListener("mouseleave", () => media.pause());
         } else {
             media.src = getOptimizedUrl(item.url);
-            media.loading = "lazy";
+            media.loading = index < 3 ? "eager" : "lazy";
+            media.decoding = "async";
+            if (index < 3) media.fetchPriority = "high";
             media.alt = item.subName || item.theme || "Anime wallpaper";
         }
         card.appendChild(media);

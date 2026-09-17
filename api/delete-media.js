@@ -21,6 +21,13 @@ module.exports = async (req, res) => {
         const apiSecret = process.env.CLOUDINARY_API_SECRET;
         if (!cloudName || !apiKey || !apiSecret) throw new Error("Missing Cloudinary configuration");
 
+        // An authenticated admin should only be able to delete assets that
+        // belong to this application, never another asset in the same account.
+        const folder = (process.env.CLOUDINARY_FOLDER || "anime-wallpapers").replace(/\/+$/, "");
+        if (!publicId.startsWith(`${folder}/`)) {
+            return res.status(400).json({ error: "Tệp không thuộc thư mục archive đã cấu hình." });
+        }
+
         const timestamp = Math.floor(Date.now() / 1000);
         const params = { invalidate: true, public_id: publicId, timestamp };
         const body = new URLSearchParams({ ...params, api_key: apiKey, signature: sign(params, apiSecret) });

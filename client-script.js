@@ -534,7 +534,7 @@ function renderGallery(data) {
         return;
     }
 
-    data.forEach((item) => {
+    data.forEach((item, index) => {
         const video = isVideo(item);
         const card = document.createElement("article");
         card.className = `card ${item.device?.toLowerCase().includes("mobile") ? "mobile-view" : ""}`;
@@ -549,7 +549,11 @@ function renderGallery(data) {
             media.addEventListener("mouseleave", () => media.pause());
         } else {
             media.src = getOptimizedUrl(item.url);
-            media.loading = "lazy";
+            // Make the first row available immediately; defer the rest so the
+            // library stays responsive even when a page has many assets.
+            media.loading = index < 3 ? "eager" : "lazy";
+            media.decoding = "async";
+            if (index < 3) media.fetchPriority = "high";
             media.alt = item.subName || item.theme || "Anime wallpaper";
         }
         card.appendChild(media);
